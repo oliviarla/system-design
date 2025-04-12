@@ -2,6 +2,7 @@ package rate_limiter
 
 import (
 	"fmt"
+	"rate-limit/pkg/hash"
 	"strconv"
 	"time"
 
@@ -14,6 +15,7 @@ type SlidingWindowCounterRateLimiter struct {
 	Limit         int
 	WindowSize    time.Duration // total window size (e.g. 1 minute)
 	SubWindowSize time.Duration // sub-window size (e.g. 10 seconds)
+	NumSubWindows int64
 }
 
 func NewSlidingWindowCounterRateLimiter(client *redis.Client, limit int, windowSize, subWindowSize time.Duration) *SlidingWindowCounterRateLimiter {
@@ -22,22 +24,22 @@ func NewSlidingWindowCounterRateLimiter(client *redis.Client, limit int, windowS
 		Limit:         limit,
 		WindowSize:    windowSize,
 		SubWindowSize: subWindowSize,
+		NumSubWindows: windowSize.Milliseconds() / subWindowSize.Milliseconds(),
 	}
 }
 
-func (r *SlidingWindowCounterRateLimiter) IsAllowed(ctx context.Context, clientId string) (bool, error) {
+func (r *SlidingWindowCounterRateLimiter) IsAllowed(ctx context.Context, clientId string, salt string) (bool, error) {
 	now := time.Now().UnixMilli()
 	subWindowSizeMillis := r.SubWindowSize.Milliseconds()
 	numSubWindows := r.WindowSize.Milliseconds() / subWindowSizeMillis
 
-	key := fmt.Sprintf("rate_limit:%s", clientId)
+	key := fmt.Sprintf("rate_limit:%s", hash.Hash(clientId, salt))
 	currentSubWindow := now / subWindowSizeMillis
-
-	pipe := r.RedisClient.Pipeline()
 	subWindowStr := strconv.FormatInt(currentSubWindow, 10)
 
+	pipe := r.RedisClient.Pipeline()
 	pipe.HIncrBy(ctx, key, subWindowStr, 1)
-	pipe.Expire(ctx, key, r.WindowSize)
+	pipe.HExpireWithArgs(ctx, key, time.Second*60, redis.HExpireArgs{NX: true}, subWindowStr)
 
 	subWindowKeys := make([]string, 0, numSubWindows)
 	for i := currentSubWindow; i > currentSubWindow-int64(numSubWindows); i-- {

@@ -1,14 +1,11 @@
 services:
   redis_container:
-    image: redis:latest
+    image: redis:7.4.2
     container_name: redis
     ports:
       - '6379:6379'
-    volumes:
-      - ./redis/data:/data
-      - ./redis/conf/redis.conf:/usr/local/conf/redis.conf
     labels:
       - "name=redis"
       - "mode=standalone"
     restart: always
-    command: redis-server /usr/local/conf/redis.conf
+    command: redis-server

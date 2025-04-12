@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	limiter "rate-limit/pkg/rate-limiter"
 	"strings"
 	"time"
@@ -13,14 +14,21 @@ import (
 )
 
 var rateLimiter *limiter.SlidingWindowCounterRateLimiter
+var salt string
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := strings.Split(r.RemoteAddr, ":")[0] // Extract IP
+		idx := strings.LastIndex(r.RemoteAddr, ":")
+		if idx == -1 {
+			http.Error(w, "Cannot split ip.", http.StatusBadRequest)
+			return
+		}
+
+		ip := r.RemoteAddr[:idx]
 		clientKey := fmt.Sprintf("%s:/recipe", ip)
 
 		ctx := context.Background()
-		allowed, err := rateLimiter.IsAllowed(ctx, clientKey)
+		allowed, err := rateLimiter.IsAllowed(ctx, clientKey, salt)
 
 		if err != nil {
 			http.Error(w, "Rate limiter error", http.StatusInternalServerError)
@@ -54,6 +62,8 @@ func main() {
 		time.Minute,
 		20*time.Second,
 	)
+
+	salt = os.Getenv("IP_HASH_SALT")
 
 	mux := http.NewServeMux()
 	mux.Handle("/recipe/", rateLimitMiddleware(http.HandlerFunc(recipeHandler)))
