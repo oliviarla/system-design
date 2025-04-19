@@ -1,30 +1,137 @@
 package main
 
 import (
+	"context"
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/jxskiss/base62"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-/*
-(단축 URL 입력을 리다이렉트 처리하는 엔드포인트) + (URL 단축을 처리하는 엔드포인트)로 구성 🍀
-*/
+var collection *mongo.Collection
+
+func init() {
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		panic(err)
+	}
+	collection = client.Database("urlshortener").Collection("urls")
+}
+
+type URLMapping struct {
+	Hash      string    `bson:"hash"`
+	URL       string    `bson:"url"`
+	ExpiresAt time.Time `bson:"expiresAt,omitempty"`
+}
+type ShortenRequest struct {
+	URL    string `json:"url"`
+	Expire int64  `json:"expire"` // 초 단위 (0이면 영구 저장)
+}
+
+func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Invalid Body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var req ShortenRequest
+	if err := json.Unmarshal(body, &req); err != nil || req.URL == "" || req.Expire < 0 {
+		http.Error(w, "Invalid JSON or expire time", http.StatusBadRequest)
+		return
+	}
+
+	var expireTime time.Time
+	if req.Expire > 0 {
+		expireTime = time.Now().Add(time.Duration(req.Expire) * time.Second)
+	}
+
+	ctx := context.TODO()
+	var existing URLMapping
+	err = collection.FindOne(ctx, bson.M{"url": req.URL}).Decode(&existing)
+	if err == nil && (existing.ExpiresAt.IsZero() || existing.ExpiresAt.After(time.Now())) {
+		shortURL := fmt.Sprintf("http://localhost:8080/%s", existing.Hash)
+		json.NewEncoder(w).Encode(map[string]string{"short_url": shortURL})
+		return
+	}
+
+	var hash string
+	for i := 0; i < 5; i++ {
+		data := []byte(fmt.Sprintf("%s-%d", req.URL, i))
+		sum := md5.Sum(data)
+		encoded := base62.StdEncoding.EncodeToString(sum[:])
+		hash = encoded[:8]
+
+		var temp URLMapping
+		err := collection.FindOne(ctx, bson.M{"hash": hash}).Decode(&temp)
+		if err == mongo.ErrNoDocuments {
+			break
+		}
+		if temp.URL == req.URL {
+			break
+		}
+	}
+
+	doc := URLMapping{
+		Hash:      hash,
+		URL:       req.URL,
+		ExpiresAt: expireTime,
+	}
+	_, err = collection.InsertOne(ctx, doc)
+	if err != nil {
+		http.Error(w, "Database Error", http.StatusInternalServerError)
+		return
+	}
+
+	shortURL := fmt.Sprintf("http://localhost:8080/%s", hash)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"short_url": shortURL})
+}
+
+func redirectURLHandler(w http.ResponseWriter, r *http.Request) {
+	hash := strings.TrimPrefix(r.URL.Path, "/")
+	if hash == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := context.TODO()
+	var result URLMapping
+	err := collection.FindOne(ctx, bson.M{"hash": hash}).Decode(&result)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if !result.ExpiresAt.IsZero() && result.ExpiresAt.Before(time.Now()) {
+		collection.DeleteOne(ctx, bson.M{"hash": hash})
+		http.Error(w, "URL expired", http.StatusGone)
+		return
+	}
+
+	http.Redirect(w, r, result.URL, http.StatusFound)
+}
+
 func main() {
+	http.HandleFunc("/shorten", shortenURLHandler)
+	http.HandleFunc("/", redirectURLHandler)
 
-}
-
-/*
-단축 URL에 매핑된 진짜 URL이 있는지 확인
-DB는 NoSQL 사용 (단축URL: 실제URL 매핑된 형태이어야 함)
-*/
-func redirectURL(r *http.Request) (*http.Response, error) {
-	return nil, nil
-}
-
-/*
-URL을 해싱하여 단축한 후 데이터베이스에 저장
-MD5 -> 일부만 잘라 Base62 변환 -> 만약 기존에 존재한다면 리해싱
-만료 시간을 지정하도록 한다. nil이면 만료되지 않음
-*/
-func shortenURL(url string, time time.Time) (string, error) {
-	return "", nil
+	fmt.Println("Server running at :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		panic(err)
+	}
 }
