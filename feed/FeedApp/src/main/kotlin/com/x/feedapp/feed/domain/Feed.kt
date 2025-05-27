@@ -1,4 +1,4 @@
-package com.x.feedapp.feed
+package com.x.feedapp.feed.domain
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.relational.core.mapping.Table

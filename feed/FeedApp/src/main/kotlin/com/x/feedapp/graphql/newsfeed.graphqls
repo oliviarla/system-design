@@ -1,0 +1,10 @@
+type Query {
+    newsfeed(userId: ID!, page: Int!): [FeedDto!]!
+}
+
+type FeedDto {
+    id: ID!
+    userId: ID!
+    content: String!
+    createdAt: String!
+}

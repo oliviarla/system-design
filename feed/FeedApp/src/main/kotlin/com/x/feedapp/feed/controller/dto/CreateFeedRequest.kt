@@ -1,4 +1,4 @@
-package com.x.feedapp.feed
+package com.x.feedapp.feed.controller.dto
 
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min

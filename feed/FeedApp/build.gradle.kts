@@ -17,13 +17,16 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
 	implementation("org.springframework.boot:spring-boot-starter-webflux")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
+
+	implementation("org.springframework.boot:spring-boot-starter-graphql")
+	implementation("com.graphql-java:graphql-java")
+
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
 	implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
 	implementation("org.springframework.kafka:spring-kafka")
 	implementation("org.springframework.session:spring-session-data-redis")
-
 	implementation("io.r2dbc:r2dbc-h2")
 	runtimeOnly("com.h2database:h2")
 

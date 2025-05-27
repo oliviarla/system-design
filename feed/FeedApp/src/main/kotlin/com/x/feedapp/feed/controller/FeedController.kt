@@ -1,9 +1,13 @@
-package com.x.feedapp.feed
+package com.x.feedapp.feed.controller
 
+import com.x.feedapp.feed.controller.dto.CreateFeedRequest
+import com.x.feedapp.feed.controller.dto.NewsFeedDto
+import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
+import com.x.feedapp.feed.domain.Feed
+import com.x.feedapp.feed.service.FeedService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 @RestController
@@ -16,15 +20,18 @@ class FeedController(private val feedService: FeedService) {
             .thenReturn(ResponseEntity.ok().build())
     }
 
-    fun updateFeed(feedId: Long, updateFeedRequest: UpdateFeedRequest, userId: Long): Mono<Feed> {
+    fun updateFeed(feedId: Long, updateFeedRequest: UpdateFeedRequest, userId: Long): Mono<NewsFeedDto> {
         return feedService.updateFeed(feedId, updateFeedRequest, userId)
+            .map { feed -> fromFeed(feed) }
     }
 
-    // TODO: delete the content's owner
+    // TODO: delete if the content's owner requested
     fun deleteFeed(feedId: Long) = feedService.deleteFeed(feedId)
 
-
-    fun getNewsFeed(userId: Long ): Flux<Feed> {
-        return feedService.getNewsFeed(userId)
-    }
+    private fun fromFeed(feed: Feed) = NewsFeedDto (
+        id = feed.id,
+        content = feed.content,
+        authorId = feed.userId,
+        createdAt = feed.createdAt,
+    )
 }
