@@ -3,7 +3,7 @@ package com.x.feedapp.feed.service
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
-import com.x.feedapp.user.UserService
+import com.x.feedapp.user.service.UserService
 import reactor.core.publisher.Flux
 
 class NewsFeedService(private val feedRedisRepository: FeedRedisRepository,

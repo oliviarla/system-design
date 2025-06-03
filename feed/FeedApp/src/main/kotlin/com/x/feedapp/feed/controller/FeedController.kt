@@ -29,9 +29,9 @@ class FeedController(private val feedService: FeedService) {
     fun deleteFeed(feedId: Long) = feedService.deleteFeed(feedId)
 
     private fun fromFeed(feed: Feed) = NewsFeedDto (
-        id = feed.id,
+        id = feed.id.toString(),
         content = feed.content,
-        authorId = feed.userId,
-        createdAt = feed.createdAt,
+        authorId = feed.userId.toString(),
+        createdAt = feed.createdAt.toString(),
     )
 }

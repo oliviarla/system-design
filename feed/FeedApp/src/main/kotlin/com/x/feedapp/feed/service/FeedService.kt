@@ -5,7 +5,7 @@ import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
-import com.x.feedapp.user.UserService
+import com.x.feedapp.user.service.UserService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -15,7 +15,8 @@ import java.lang.RuntimeException
 @Service
 class FeedService(private val feedDBRepository: FeedDBRepository,
                   private val feedRedisRepository: FeedRedisRepository,
-                  private val userService: UserService) {
+                  private val userService: UserService
+) {
 
     private val logger : Logger? = LoggerFactory.getLogger(FeedService::class.java)
 
