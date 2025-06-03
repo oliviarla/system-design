@@ -1,7 +1,12 @@
 package com.x.feedapp.user.repository
 
-import org.springframework.data.repository.reactive.ReactiveCrudRepository
+import com.x.feedapp.user.domain.User
+import org.springframework.data.cassandra.repository.ReactiveCassandraRepository
+import reactor.core.publisher.Mono
 
-interface UserRepository: ReactiveCrudRepository<User, Long> {
-    // Additional query methods can be defined here if needed
+interface UserRepository: ReactiveCassandraRepository<User, Long> {
+    fun existsByUsername(username: String): Mono<Boolean>
+
+    fun findByUsername(username: String): Mono<User>
+
 }

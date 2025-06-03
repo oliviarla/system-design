@@ -1,0 +1,42 @@
+package com.x.feedapp.user.security
+
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.Authentication
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContext
+import org.springframework.security.core.context.SecurityContextImpl
+import org.springframework.security.web.server.context.ServerSecurityContextRepository
+import org.springframework.util.CollectionUtils
+import org.springframework.web.server.ServerWebExchange
+import org.springframework.web.server.WebSession
+import reactor.core.publisher.Mono
+import java.util.stream.Collectors
+
+
+class CustomServerSecurityContextRepository : ServerSecurityContextRepository {
+    override fun save(exchange: ServerWebExchange, context: SecurityContext): Mono<Void> {
+        return Mono.empty()
+    }
+
+    override fun load(exchange: ServerWebExchange): Mono<SecurityContext> {
+        return exchange.session
+            .flatMap<SecurityContext> { session: WebSession ->
+                val principal = session.getAttribute<Any>("principal")
+                val authorities =
+                    session.getAttribute<List<String>>("authorities")!!
+                if (principal == null || CollectionUtils.isEmpty(authorities)) {
+                    return@flatMap Mono.empty<SecurityContext>()
+                }
+                val grantedAuthorities = authorities.stream()
+                    .map { role: String? ->
+                        SimpleGrantedAuthority(
+                            role
+                        )
+                    }
+                    .collect(Collectors.toList())
+                val authentication: Authentication =
+                    UsernamePasswordAuthenticationToken(principal, null, grantedAuthorities)
+                Mono.just<SecurityContextImpl>(SecurityContextImpl(authentication))
+            }
+    }
+}
