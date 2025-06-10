@@ -1,11 +1,12 @@
 package com.x.feedapp.user.security
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.server.reactive.ServerHttpResponse
-import org.springframework.security.authentication.ReactiveAuthenticationManager
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder
@@ -22,20 +23,20 @@ import org.springframework.util.CollectionUtils
 class SecurityConfig {
     @Bean
     fun filterChain(
-        http: ServerHttpSecurity, manager: ReactiveAuthenticationManager?,
+        http: ServerHttpSecurity,
         loginFilter: LoginAuthenticationWebFilter?
     ): SecurityWebFilterChain {
         http.csrf(ServerHttpSecurity.CsrfSpec::disable)
         http.authorizeExchange { authorizeExchangeSpec ->
             authorizeExchangeSpec
-                .pathMatchers("/join", "/login").permitAll()
+                .pathMatchers("/api/v1/users/join", "/api/v1/users/login").permitAll()
                 .anyExchange().authenticated()
         }
         http.headers { configurer -> configurer.frameOptions(ServerHttpSecurity.HeaderSpec.FrameOptionsSpec::disable) }
         http.addFilterAt(loginFilter, SecurityWebFiltersOrder.AUTHENTICATION)
         http.logout { logoutSpec ->
             logoutSpec
-                .logoutUrl("/logout")
+                .logoutUrl("/api/v1/users/logout")
                 .logoutHandler { exchange, _ ->
                     exchange.exchange.session
                         .flatMap { session ->
@@ -71,5 +72,10 @@ class SecurityConfig {
     @Bean
     fun serverSecurityContextRepository(): ServerSecurityContextRepository {
         return CustomServerSecurityContextRepository()
+    }
+
+    @Bean
+    fun objectMapper(): ObjectMapper {
+        return ObjectMapper().registerKotlinModule()
     }
 }

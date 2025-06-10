@@ -1,7 +1,7 @@
 package com.x.feedapp.user.security
 
 import com.x.feedapp.user.repository.UserRepository
-import org.springframework.security.core.GrantedAuthority
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetails
@@ -16,8 +16,9 @@ class CustomReactiveUserDetailService(private val userRepository: UserRepository
         if (username.isNullOrBlank()) {
             return Mono.error(UsernameNotFoundException("Username is null or blank."))
         }
-        return userRepository.findByUsername(username)
-            .map { user -> User(user.username, user.password, listOf(GrantedAuthority { "USER" })) as UserDetails }
-            .or(Mono.error(UsernameNotFoundException("User not found.")))
+        val findByUsername: Mono<com.x.feedapp.user.domain.User> = userRepository.findByUsername(username)
+        return findByUsername
+            .map { user -> User(user.username, user.password, listOf(SimpleGrantedAuthority ("USER" ))) as UserDetails }
+            .switchIfEmpty(Mono.error(UsernameNotFoundException("User not found.")))
     }
 }

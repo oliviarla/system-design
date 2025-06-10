@@ -1,0 +1,21 @@
+services:
+  redis_container:
+    image: redis:7.4.2
+    container_name: redis
+    ports:
+      - '6379:6379'
+    labels:
+      - "name=redis"
+      - "mode=standalone"
+    restart: always
+    command: redis-server
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: scylla
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla-data:/var/lib/scylla
+
+volumes:
+  scylla-data:

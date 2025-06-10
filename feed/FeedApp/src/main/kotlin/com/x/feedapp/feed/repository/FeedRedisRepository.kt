@@ -30,9 +30,9 @@ class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTempla
             .mapNotNull { feedId -> feedId as? Long }
     }
 
-    fun getRecentFeedIds(userId: Flux<Long>) {
+    fun getRecentFeedIds(userId: Flux<Long>): Flux<Long> {
         // get the latest 5 feeds of each user
-        return reactiveRedisTemplate.opsForZSet()
-
+//        return reactiveRedisTemplate.opsForZSet()
+        return Flux.empty()
     }
 }

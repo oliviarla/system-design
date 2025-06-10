@@ -10,7 +10,8 @@ class NewsFeedController(private val newsFeedService: NewsFeedService) {
 
     @QueryMapping
     fun getNewsFeed(@Argument userId: Long, @Argument page: Int): Mono<List<NewsFeedDto>> {
-        return newsFeedService.getNewsFeed(userId, page).collectList()
+        return Mono.empty()
+//        return newsFeedService.getNewsFeed(userId, page).collectList()
     }
 
 }

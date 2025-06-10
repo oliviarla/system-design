@@ -10,7 +10,6 @@ import org.springframework.util.CollectionUtils
 import org.springframework.web.server.ServerWebExchange
 import org.springframework.web.server.WebSession
 import reactor.core.publisher.Mono
-import java.util.stream.Collectors
 
 
 class CustomServerSecurityContextRepository : ServerSecurityContextRepository {
@@ -20,22 +19,14 @@ class CustomServerSecurityContextRepository : ServerSecurityContextRepository {
 
     override fun load(exchange: ServerWebExchange): Mono<SecurityContext> {
         return exchange.session
-            .flatMap<SecurityContext> { session: WebSession ->
+            .flatMap { session: WebSession ->
                 val principal = session.getAttribute<Any>("principal")
-                val authorities =
-                    session.getAttribute<List<String>>("authorities")!!
+                val authorities = session.getAttribute<Set<SimpleGrantedAuthority>>("authorities")
                 if (principal == null || CollectionUtils.isEmpty(authorities)) {
-                    return@flatMap Mono.empty<SecurityContext>()
+                    return@flatMap Mono.empty()
                 }
-                val grantedAuthorities = authorities.stream()
-                    .map { role: String? ->
-                        SimpleGrantedAuthority(
-                            role
-                        )
-                    }
-                    .collect(Collectors.toList())
                 val authentication: Authentication =
-                    UsernamePasswordAuthenticationToken(principal, null, grantedAuthorities)
+                    UsernamePasswordAuthenticationToken(principal, null, authorities)
                 Mono.just<SecurityContextImpl>(SecurityContextImpl(authentication))
             }
     }

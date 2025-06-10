@@ -2,6 +2,7 @@ package com.x.feedapp.user.security
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -19,32 +20,32 @@ import org.springframework.security.web.server.context.NoOpServerSecurityContext
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers
 import org.springframework.session.ReactiveFindByIndexNameSessionRepository
 import org.springframework.stereotype.Component
-import org.springframework.web.server.ServerWebExchange
 import org.springframework.web.server.WebSession
 import reactor.core.publisher.Mono
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 @Component
-class LoginAuthenticationWebFilter(authenticationManager: ReactiveAuthenticationManager) :
+class LoginAuthenticationWebFilter(authenticationManager: ReactiveAuthenticationManager, objectMapper: ObjectMapper) :
     AuthenticationWebFilter(authenticationManager) {
     init {
         this.setRequiresAuthenticationMatcher(
-            ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/login")
+            ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/v1/users/login")
         )
-        this.setServerAuthenticationConverter { exchange: ServerWebExchange ->
+        this.setServerAuthenticationConverter { exchange ->
             exchange.request.body
-                .next()
-                .flatMap { dataBuffer: DataBuffer ->
-                    val loginRequest: LoginRequest
-                    try {
-                        loginRequest = ObjectMapper().readValue(dataBuffer.asInputStream(), LoginRequest::class.java)
-                    } catch (e: IOException) {
-                        return@flatMap Mono.error<Authentication>(
-                            e
-                        )
+                .reduce(DataBuffer::write)
+                .flatMap { dataBuffer ->
+                    val bytes = ByteArray(dataBuffer.readableByteCount())
+                    dataBuffer.read(bytes)
+                    DataBufferUtils.release(dataBuffer)
+
+                    val loginRequest: LoginRequest = try {
+                        objectMapper.readValue(bytes, LoginRequest::class.java)
+                    } catch (e: Exception) {
+                        return@flatMap Mono.error<Authentication>(e)
                     }
-                    Mono.just<UsernamePasswordAuthenticationToken>(
+
+                    Mono.just(
                         UsernamePasswordAuthenticationToken(
                             loginRequest.username,
                             loginRequest.password

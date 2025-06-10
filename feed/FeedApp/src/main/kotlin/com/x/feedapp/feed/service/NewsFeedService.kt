@@ -20,7 +20,8 @@ class NewsFeedService(private val feedRedisRepository: FeedRedisRepository,
     }
 
     private fun combineNewsFeedIds(userId: Long, page: Int): Flux<Long> {
-        userService.getFollowingIds(userId)
+        return Flux.empty()
+//        userService.userServicegetFollowingIds(userId)
         // 팔로잉 중인 유저들이 작성한 모든 피드를 정렬해서 해당 페이지에 속하는 피드 아이디들을 조회한다.
     }
 
