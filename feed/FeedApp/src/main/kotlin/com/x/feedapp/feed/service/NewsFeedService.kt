@@ -16,7 +16,7 @@ class NewsFeedService(private val feedRedisRepository: FeedRedisRepository,
             .switchIfEmpty(
                 combineNewsFeedIds(userId, page)
             )
-            .flatMap { feedId -> feedDBRepository.findById(feedId) }
+            .flatMap { feedId -> feedDBRepository.findById(feedId.toString()) }
     }
 
     private fun combineNewsFeedIds(userId: Long, page: Int): Flux<Long> {

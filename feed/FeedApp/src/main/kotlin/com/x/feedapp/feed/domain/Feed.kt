@@ -1,14 +1,21 @@
 package com.x.feedapp.feed.domain
 
+import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.annotation.Id
+import org.springframework.data.annotation.LastModifiedDate
+import org.springframework.data.cassandra.core.mapping.Column
 import org.springframework.data.cassandra.core.mapping.Table
-import java.time.LocalDateTime
+import java.time.Instant
 
 @Table
 data class Feed(
-    @Id val id: Long? = null,
+    @Id val id: String,
     val content: String,
-    val userId: Long,
-    val createdAt: LocalDateTime? = null,
-    val updatedAt: LocalDateTime? = null,
+    val username: String,
+    @field:Column("created_at")
+    @field:CreatedDate
+    val createdAt: Instant? = null,
+    @field:Column("updated_at")
+    @field:LastModifiedDate
+    val updatedAt: Instant? = null,
 )

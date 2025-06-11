@@ -1,6 +1,6 @@
 package com.x.feedapp.feed.controller.dto
 
-data class NewsFeedDto(
+data class FeedDto(
     val id: String,
     val content: String,
     val authorId: String,

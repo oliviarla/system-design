@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS feed_app.user
 
 CREATE TABLE IF NOT EXISTS feed_app.feed
 (
-    feedId text PRIMARY KEY,
-    password text,
+    id text PRIMARY KEY,
+    content text,
+    username text,
     created_at timestamp,
+    updated_at timestamp,
 );

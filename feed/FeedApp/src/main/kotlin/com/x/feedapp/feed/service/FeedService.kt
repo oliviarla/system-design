@@ -1,5 +1,6 @@
 package com.x.feedapp.feed.service
 
+import com.datastax.oss.driver.api.core.uuid.Uuids
 import com.x.feedapp.feed.controller.dto.CreateFeedRequest
 import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.domain.Feed
@@ -20,23 +21,23 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
 
     private val logger : Logger? = LoggerFactory.getLogger(FeedService::class.java)
 
-    fun createFeed(createFeedRequest: CreateFeedRequest, userId: Long): Mono<Feed> {
+    fun createFeed(createFeedRequest: CreateFeedRequest, username: String): Mono<Feed> {
         val feed = Feed(
+            id = Uuids.timeBased().toString(),
             content = createFeedRequest.content,
-            userId = userId,
+            username = username,
         )
+        // TODO: 카프카 토픽으로 feedId, username 전송
         return feedDBRepository.save(feed)
-            .doOnNext { feed -> logger?.info(feed.toString()) }
-        // TODO: 카프카 토픽으로 feedId, userId 전송
     }
 
-    fun updateFeed(id: Long, updateFeedRequest: UpdateFeedRequest, userId: Long): Mono<Feed> {
-        return feedDBRepository.existsById(id)
+    fun updateFeed(feedId: String, updateFeedRequest: UpdateFeedRequest, username: String): Mono<Feed> {
+        return feedDBRepository.existsById(feedId)
             .flatMap { exists ->
                 if (exists) {
                     val feed = Feed(
-                        id = id,
-                        userId = userId,
+                        id = feedId,
+                        username = username,
                         content = updateFeedRequest.content,
                     )
                     feedDBRepository.save(feed)
@@ -45,5 +46,20 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
                 }
             }
     }
-    fun deleteFeed(id: Long) = feedDBRepository.deleteById(id)
+
+    fun deleteFeed(id: String, username: String): Mono<Boolean> {
+        return feedDBRepository.findById(id)
+            .flatMap { feed ->
+                if (feed.username == username) {
+                    feedDBRepository.deleteById(id).thenReturn(true)
+                } else {
+                    Mono.just(false)
+                }
+            }
+            // TODO: 캐시의 피드도 삭제하기
+    }
+
+    fun getFeed(id: String): Mono<Feed> {
+        return feedDBRepository.findById(id)
+    }
 }
