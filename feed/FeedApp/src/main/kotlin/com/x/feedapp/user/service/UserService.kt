@@ -4,22 +4,21 @@ import com.x.feedapp.user.domain.User
 import com.x.feedapp.user.repository.UserRepository
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 @Service
 class UserService(private val userRepository: UserRepository, private val passwordEncoder: PasswordEncoder) {
-    fun getFollowingIds(userId: Long): Flux<Long> {
-        // TODO: Mock implementation, replace with actual logic
-        return Flux.just(123, 234, 345);
-    }
 
     fun join(username: String, password: String): Mono<Boolean> {
         return validateUsername(username)
             .then(validatePassword(password))
             .map { isValid ->
                 if (isValid) {
-                    val user = User(username = username, password = passwordEncoder.encode(password))
+                    val user = User(
+                        username = username,
+                        password = passwordEncoder.encode(password),
+                        isNewUser = true,
+                    )
                     userRepository.save(user).thenReturn(true)
                 } else {
                     Mono.just(false)
@@ -28,9 +27,14 @@ class UserService(private val userRepository: UserRepository, private val passwo
     }
 
     private fun validateUsername(username: String): Mono<Boolean> {
-        if (username.isBlank()) {
-            return Mono.just(false)
+        if (username.isBlank() || username.length < 3 || username.length > 20) {
+            return Mono.error(IllegalArgumentException("username은 3자 이상 20자 이하로 입력해야 합니다."))
         }
+        val usernameRegex = Regex("^[a-z0-9_]+$")
+        if (!usernameRegex.matches(username)) {
+            return Mono.error(IllegalArgumentException("username은 영문 소문자, 숫자, _ 만 사용할 수 있습니다."))
+        }
+
         return userRepository.existsByUsername(username)
             .flatMap { exists ->
                 if (exists) {

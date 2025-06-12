@@ -65,7 +65,7 @@ class FeedController(private val feedService: FeedService) {
     }
 
     private fun fromFeed(feed: Feed) = FeedDto (
-        id = feed.id,
+        id = feed.feedId,
         content = feed.content,
         authorId = feed.username,
         createdAt = feed.createdAt.toString(),

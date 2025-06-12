@@ -23,9 +23,10 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
 
     fun createFeed(createFeedRequest: CreateFeedRequest, username: String): Mono<Feed> {
         val feed = Feed(
-            id = Uuids.timeBased().toString(),
+            feedId = Uuids.timeBased().toString(),
             content = createFeedRequest.content,
             username = username,
+            isNewFeed = true,
         )
         // TODO: 카프카 토픽으로 feedId, username 전송
         return feedDBRepository.save(feed)
@@ -36,7 +37,7 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
             .flatMap { exists ->
                 if (exists) {
                     val feed = Feed(
-                        id = feedId,
+                        feedId = feedId,
                         username = username,
                         content = updateFeedRequest.content,
                     )
