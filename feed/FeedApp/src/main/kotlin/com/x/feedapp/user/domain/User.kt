@@ -16,11 +16,16 @@ data class User(
     @field:Column("created_at")
     @field:CreatedDate
     var createdAt: Instant? = null,
-    @field:Transient
-    var isNewUser: Boolean = false
 ) : Persistable<String> {
+
+    @Transient
+    private var isNewUser: Boolean = false
 
     override fun getId(): String = username
 
     override fun isNew(): Boolean = isNewUser
+
+    fun markAsNew() {
+        isNewUser = true
+    }
 }

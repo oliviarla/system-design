@@ -16,8 +16,7 @@ class CustomReactiveUserDetailService(private val userRepository: UserRepository
         if (username.isNullOrBlank()) {
             return Mono.error(UsernameNotFoundException("Username is null or blank."))
         }
-        val findByUsername: Mono<com.x.feedapp.user.domain.User> = userRepository.findByUsername(username)
-        return findByUsername
+        return userRepository.findByUsername(username)
             .map { user -> User(user.username, user.password, listOf(SimpleGrantedAuthority ("USER" ))) as UserDetails }
             .switchIfEmpty(Mono.error(UsernameNotFoundException("User not found.")))
     }
