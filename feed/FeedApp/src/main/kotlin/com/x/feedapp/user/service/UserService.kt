@@ -17,8 +17,8 @@ class UserService(private val userRepository: UserRepository, private val passwo
                     val user = User(
                         username = username,
                         password = passwordEncoder.encode(password),
-                        isNewUser = true,
                     )
+                    user.markAsNew()
                     userRepository.save(user).thenReturn(true)
                 } else {
                     Mono.just(false)
@@ -63,6 +63,6 @@ class UserService(private val userRepository: UserRepository, private val passwo
                         " and must not contain whitespace."
             ))
         }
-        return Mono.just(isValid)
+        return Mono.just(true)
     }
 }

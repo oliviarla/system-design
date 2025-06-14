@@ -30,6 +30,7 @@ class SecurityConfig {
         http.authorizeExchange { authorizeExchangeSpec ->
             authorizeExchangeSpec
                 .pathMatchers("/api/v1/users/join", "/api/v1/users/login").permitAll()
+                .pathMatchers("/api/v1/users/followings/**", "/api/v1/users/followers/**").permitAll()
                 .anyExchange().authenticated()
         }
         http.headers { configurer -> configurer.frameOptions(ServerHttpSecurity.HeaderSpec.FrameOptionsSpec::disable) }

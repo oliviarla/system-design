@@ -1,12 +1,14 @@
 package com.x.feedapp.user.controller
 
 import com.x.feedapp.user.controller.dto.JoinRequest
+import com.x.feedapp.user.service.FollowService
 import com.x.feedapp.user.service.UserService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.security.core.context.SecurityContext
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -15,7 +17,8 @@ import reactor.core.publisher.Mono
 
 @RestController
 @RequestMapping("/api/v1/users")
-class UserController(private val userService: UserService) {
+class UserController(private val userService: UserService,
+    private val followService: FollowService) {
 
     @PostMapping("/join")
     fun join(@RequestBody joinRequest: JoinRequest): Mono<ResponseEntity<Unit>> {
@@ -30,9 +33,45 @@ class UserController(private val userService: UserService) {
     }
 
     @GetMapping("/me")
-    fun myInfo(): Mono<Any> {
+    fun myUsername(): Mono<ResponseEntity<String>> {
         return ReactiveSecurityContextHolder.getContext()
             .map(SecurityContext::getAuthentication)
-            .map(Authentication::getPrincipal);
+            .map(Authentication::getPrincipal)
+            .map { username -> ResponseEntity.ok(username as String) }
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()));
+    }
+
+    @GetMapping("/followings/{username}")
+    fun followingsByUsername(@PathVariable username: String): Mono<List<String>> {
+        return followService.getFollowings(username)
+            .collectList()
+    }
+
+    @GetMapping("/followers/{username}")
+    fun followersByUsername(@PathVariable username: String): Mono<List<String>> {
+        return followService.getFollowers(username)
+            .collectList()
+    }
+
+    @PostMapping("/follow/{username}")
+    fun follow(@PathVariable username: String): Mono<Void> {
+        return ReactiveSecurityContextHolder.getContext()
+            .map(SecurityContext::getAuthentication)
+            .map(Authentication::getPrincipal)
+            .cast(String::class.java)
+            .flatMap { currentUsername ->
+                followService.follow(currentUsername, username)
+            }
+    }
+
+    @PostMapping("/unfollow/{username}")
+    fun unfollow(@PathVariable username: String): Mono<Void> {
+        return ReactiveSecurityContextHolder.getContext()
+            .map(SecurityContext::getAuthentication)
+            .map(Authentication::getPrincipal)
+            .cast(String::class.java)
+            .flatMap { currentUsername ->
+                followService.unfollow(currentUsername, username)
+            }
     }
 }
