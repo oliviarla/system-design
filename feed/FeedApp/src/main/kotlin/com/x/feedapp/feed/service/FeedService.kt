@@ -4,22 +4,30 @@ import com.datastax.oss.driver.api.core.uuid.Uuids
 import com.x.feedapp.feed.controller.dto.CreateFeedRequest
 import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.domain.Feed
+import com.x.feedapp.feed.domain.toFeedByUser
+import com.x.feedapp.feed.repository.FeedByUserRepository
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
 import com.x.feedapp.user.service.UserService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.data.cassandra.core.query.CassandraPageRequest
+import org.springframework.data.domain.Slice
+import org.springframework.data.domain.SliceImpl
 import org.springframework.stereotype.Service
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.lang.RuntimeException
 
 @Service
-class FeedService(private val feedDBRepository: FeedDBRepository,
-                  private val feedRedisRepository: FeedRedisRepository,
-                  private val userService: UserService
+class FeedService(
+    private val feedDBRepository: FeedDBRepository,
+    private val feedByUserRepository: FeedByUserRepository,
+    private val feedRedisRepository: FeedRedisRepository,
+    private val userService: UserService
 ) {
 
-    private val logger : Logger? = LoggerFactory.getLogger(FeedService::class.java)
+    private val logger: Logger? = LoggerFactory.getLogger(FeedService::class.java)
 
     fun createFeed(createFeedRequest: CreateFeedRequest, username: String): Mono<Feed> {
         if (createFeedRequest.content.isEmpty() || createFeedRequest.content.length > 300) {
@@ -27,12 +35,18 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
         }
         val feed = Feed(
             feedId = Uuids.timeBased().toString(),
-            content = createFeedRequest.content,
             username = username,
-            isNewFeed = true,
+            content = createFeedRequest.content
         )
+        feed.markAsNew()
         // TODO: 카프카 토픽으로 feedId, username 전송
         return feedDBRepository.save(feed)
+            .flatMap { savedFeed ->
+                val feedByUser = toFeedByUser(feed)
+                feedByUser.markAsNew()
+                feedByUserRepository.save(feedByUser)
+                    .thenReturn(savedFeed)
+            }
     }
 
     fun updateFeed(feedId: String, updateFeedRequest: UpdateFeedRequest, username: String): Mono<Feed> {
@@ -42,7 +56,7 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
                     val feed = Feed(
                         feedId = feedId,
                         username = username,
-                        content = updateFeedRequest.content,
+                        content = updateFeedRequest.content
                     )
                     feedDBRepository.save(feed)
                 } else {
@@ -55,15 +69,30 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
         return feedDBRepository.findById(id)
             .flatMap { feed ->
                 if (feed.username == username) {
-                    feedDBRepository.deleteById(id).thenReturn(true)
+                    feedDBRepository.deleteByFeedId(id).thenReturn(true)
                 } else {
                     Mono.just(false)
                 }
             }
-            // TODO: 캐시의 피드도 삭제하기
+        // TODO: 캐시의 피드도 삭제하기
     }
 
     fun getFeed(id: String): Mono<Feed> {
         return feedDBRepository.findById(id)
+    }
+
+    fun getFeedsByUser(username: String, pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
+        return feedByUserRepository.findAllByKeyUsername(username, pageRequest)
+            .flatMap { slice ->
+                Flux.fromIterable(slice.content)
+                    .flatMap { feedByUser -> feedDBRepository.findById(feedByUser.key.feedId) }
+                    .collectList()
+                    .map { feeds -> SliceImpl(feeds, slice.pageable, slice.hasNext()) }
+            }
+    }
+
+    fun findMyFeeds(pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
+        return userService.findAuthentication()
+            .flatMap { username -> getFeedsByUser(username, pageRequest) }
     }
 }

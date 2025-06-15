@@ -2,6 +2,7 @@ package com.x.feedapp.user.service
 
 import com.x.feedapp.user.domain.User
 import com.x.feedapp.user.repository.UserRepository
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Mono
@@ -64,5 +65,10 @@ class UserService(private val userRepository: UserRepository, private val passwo
             ))
         }
         return Mono.just(true)
+    }
+
+    fun findAuthentication(): Mono<String> {
+        return ReactiveSecurityContextHolder.getContext()
+            .map { context -> context.authentication.principal as String }
     }
 }

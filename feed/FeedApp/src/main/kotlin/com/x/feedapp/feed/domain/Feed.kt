@@ -9,24 +9,28 @@ import org.springframework.data.cassandra.core.mapping.Table
 import org.springframework.data.domain.Persistable
 import java.time.Instant
 
-@Table
+@Table("feeds_by_id")
 data class Feed(
     @Id
-    @field:Column("id")
+    @field:Column("feed_id")
     val feedId: String,
-    val content: String,
     val username: String,
+    val content: String,
     @field:Column("created_at")
     @field:CreatedDate
     val createdAt: Instant? = null,
     @field:Column("updated_at")
     @field:LastModifiedDate
     val updatedAt: Instant? = null,
-    @field:Transient
-    var isNewFeed: Boolean = false
 ) : Persistable<String> {
+    @Transient
+    private var isNewFeed: Boolean = false
 
     override fun getId(): String = feedId
 
     override fun isNew(): Boolean = isNewFeed
+
+    fun markAsNew() {
+        isNewFeed = true
+    }
 }

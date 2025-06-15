@@ -25,11 +25,18 @@ CREATE TABLE IF NOT EXISTS feed_app.follower_by_user (
     PRIMARY KEY (username, follower_username)
 );
 
-CREATE TABLE IF NOT EXISTS feed_app.feed
-(
-    id text PRIMARY KEY,
-    content text,
+CREATE TABLE IF NOT EXISTS feed_app.feeds_by_user (
     username text,
     created_at timestamp,
-    updated_at timestamp,
+    feed_id text,
+    PRIMARY KEY (username, created_at, feed_id)
+) WITH CLUSTERING ORDER BY (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS feed_app.feeds_by_id (
+    feed_id text,
+    username text,
+    created_at timestamp,
+    updated_at timestamp
+    content text,
+    PRIMARY KEY (feed_id)
 );
