@@ -22,6 +22,9 @@ class FeedService(private val feedDBRepository: FeedDBRepository,
     private val logger : Logger? = LoggerFactory.getLogger(FeedService::class.java)
 
     fun createFeed(createFeedRequest: CreateFeedRequest, username: String): Mono<Feed> {
+        if (createFeedRequest.content.isEmpty() || createFeedRequest.content.length > 300) {
+            return Mono.error(RuntimeException("Content length must be between 1 and 300 characters"))
+        }
         val feed = Feed(
             feedId = Uuids.timeBased().toString(),
             content = createFeedRequest.content,
