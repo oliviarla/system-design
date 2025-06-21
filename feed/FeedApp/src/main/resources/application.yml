@@ -8,3 +8,8 @@ spring:
       connect-timeout: 5s
       init-query-timeout: 5s
     local-datacenter: datacenter1
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer

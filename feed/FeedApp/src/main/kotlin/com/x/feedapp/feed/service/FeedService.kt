@@ -8,6 +8,7 @@ import com.x.feedapp.feed.domain.toFeedByUser
 import com.x.feedapp.feed.repository.FeedByUserRepository
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
+import com.x.feedapp.feed.repository.KafkaProducer
 import com.x.feedapp.user.service.UserService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -24,29 +25,26 @@ class FeedService(
     private val feedDBRepository: FeedDBRepository,
     private val feedByUserRepository: FeedByUserRepository,
     private val feedRedisRepository: FeedRedisRepository,
-    private val userService: UserService
+    private val userService: UserService,
+    private val kafkaProducer: KafkaProducer
 ) {
 
     private val logger: Logger? = LoggerFactory.getLogger(FeedService::class.java)
 
     fun createFeed(createFeedRequest: CreateFeedRequest, username: String): Mono<Feed> {
-        if (createFeedRequest.content.isEmpty() || createFeedRequest.content.length > 300) {
+        val content = createFeedRequest.content
+        if (content.isEmpty() || content.length > 300) {
             return Mono.error(RuntimeException("Content length must be between 1 and 300 characters"))
         }
-        val feed = Feed(
-            feedId = Uuids.timeBased().toString(),
-            username = username,
-            content = createFeedRequest.content
-        )
-        feed.markAsNew()
-        // TODO: 카프카 토픽으로 feedId, username 전송
+
+        val feedId = Uuids.timeBased().toString()
+        val feed = Feed(feedId = feedId, username = username, content = content).apply { markAsNew() }
+        val feedByUser = toFeedByUser(feed).apply { markAsNew() }
+
         return feedDBRepository.save(feed)
-            .flatMap { savedFeed ->
-                val feedByUser = toFeedByUser(feed)
-                feedByUser.markAsNew()
-                feedByUserRepository.save(feedByUser)
-                    .thenReturn(savedFeed)
-            }
+            .then(feedByUserRepository.save(feedByUser))
+            .then(Mono.fromFuture { kafkaProducer.sendFeedCreationMessage("$username $feedId") })
+            .thenReturn(feed)
     }
 
     fun updateFeed(feedId: String, updateFeedRequest: UpdateFeedRequest, username: String): Mono<Feed> {
