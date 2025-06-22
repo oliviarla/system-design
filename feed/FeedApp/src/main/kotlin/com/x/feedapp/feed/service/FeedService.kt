@@ -1,6 +1,5 @@
 package com.x.feedapp.feed.service
 
-import com.datastax.oss.driver.api.core.uuid.Uuids
 import com.x.feedapp.feed.controller.dto.CreateFeedRequest
 import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.domain.Feed
@@ -26,6 +25,7 @@ class FeedService(
     private val feedByUserRepository: FeedByUserRepository,
     private val feedRedisRepository: FeedRedisRepository,
     private val userService: UserService,
+    private val idGenerationService: IdGenerationService,
     private val kafkaProducer: KafkaProducer
 ) {
 
@@ -37,14 +37,18 @@ class FeedService(
             return Mono.error(RuntimeException("Content length must be between 1 and 300 characters"))
         }
 
-        val feedId = Uuids.timeBased().toString()
-        val feed = Feed(feedId = feedId, username = username, content = content).apply { markAsNew() }
-        val feedByUser = toFeedByUser(feed).apply { markAsNew() }
-
-        return feedDBRepository.save(feed)
-            .then(feedByUserRepository.save(feedByUser))
-            .then(Mono.fromFuture { kafkaProducer.sendFeedCreationMessage("$username $feedId") })
-            .thenReturn(feed)
+        return idGenerationService.generateId()
+            .map { feedId -> Feed(feedId = feedId, username = username, content = content).apply { markAsNew() } }
+            .flatMap { feed ->
+                feedDBRepository.save(feed)
+                    .flatMap { savedFeed ->
+                        feedByUserRepository.save(toFeedByUser(savedFeed).apply { markAsNew() })
+                            .doOnNext { feedByUser ->
+                                kafkaProducer.sendFeedCreationMessage("$username ${feedByUser.id}")
+                            }
+                            .thenReturn(savedFeed)
+                    }
+            }
     }
 
     fun updateFeed(feedId: String, updateFeedRequest: UpdateFeedRequest, username: String): Mono<Feed> {

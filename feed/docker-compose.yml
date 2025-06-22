@@ -33,7 +33,13 @@ services:
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
     volumes:
       - kafka-data:/bitnami/kafka
-
+  id-generator:
+    image: imoliviarla/id-generator:latest
+    container_name: id-generator
+    ports:
+      - '9713:9713'
+    environment:
+      - NODE_ID=1
 volumes:
   scylla-data:
   kafka-data:
