@@ -9,7 +9,7 @@ import reactor.core.publisher.Mono
 class NewsFeedController(private val newsFeedService: NewsFeedService) {
 
     @QueryMapping
-    fun getNewsFeed(@Argument userId: Long, @Argument page: Int): Mono<List<FeedResponse>> {
+    fun getNewsFeed(@Argument userId: Long, @Argument lastFeedId: Int, @Argument size: Int): Mono<List<FeedResponse>> {
         return Mono.empty()
 //        return newsFeedService.getNewsFeed(userId, page).collectList()
     }

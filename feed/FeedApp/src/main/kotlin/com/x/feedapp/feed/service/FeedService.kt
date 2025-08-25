@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.lang.RuntimeException
+import java.time.Instant
 
 @Service
 class FeedService(
@@ -96,5 +97,16 @@ class FeedService(
     fun findMyFeeds(pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
         return userService.findAuthentication()
             .flatMap { username -> getFeedsByUser(username, pageRequest) }
+    }
+
+    fun getFeedIdsBetweenDates(username: String, start: Instant, end: Instant): Flux<String> {
+        val fromId = idGenerationService.generateMinSnowflakeId(start)
+        val toId = idGenerationService.generateMaxSnowflakeId(end)
+        return Mono.zip(fromId, toId)
+            .flatMapMany {
+                tuple -> feedByUserRepository
+                    .findByKeyUsernameAndKeyFeedIdBetween(username, tuple.t1, tuple.t2)
+            }
+            .map { it.key.feedId }
     }
 }

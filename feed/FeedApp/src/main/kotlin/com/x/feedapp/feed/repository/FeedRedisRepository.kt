@@ -1,9 +1,12 @@
 package com.x.feedapp.feed.repository
 
 import org.springframework.data.domain.Range
+import org.springframework.data.redis.connection.Limit
 import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.data.redis.core.ZSetOperations
 import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 
 @Repository
 class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTemplate<String, Any>) {
@@ -12,27 +15,28 @@ class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTempla
     private val defaultPageSize = 30
 
     /**
-     * ZSET
-     * - Key: "newsfeed:{userId}"
-     * - Score: timestamp
-     * - Member: "{feedId}"
-     *
-     * 1. Cache에 Sorted Set 있는지 확인 -> 있다면 해당 ID들 반환
-     * 2. Cache에 없으면 회원 ID의 팔로잉 ID 목록 조회
-     * 3. 각 회원마다 최신 피드를 캐싱하고 있으므로 최신 5개씩 가져와 이를 조합한다.
+     *  Get news feed ids of news feed after the given last feed id from redis zset.
      */
-    fun getNewsFeedIds(userId: Long, page: Int): Flux<Long> {
-        val start = page * defaultPageSize
-        val end = start + defaultPageSize - 1
-
+    fun getNewsFeedIds(username: String, size: Int, lastFeedId: String): Flux<Long> {
         return reactiveRedisTemplate.opsForZSet()
-            .reverseRange(key + userId, Range.closed(start.toLong(), end.toLong()))
+            .reverseRangeByScore(key + username,
+                Range.rightUnbounded(Range.Bound.inclusive(lastFeedId.toDouble())),
+                Limit.limit().count(defaultPageSize))
             .mapNotNull { feedId -> feedId as? Long }
     }
 
-    fun getRecentFeedIds(userId: Flux<Long>): Flux<Long> {
-        // get the latest 5 feeds of each user
-//        return reactiveRedisTemplate.opsForZSet()
-        return Flux.empty()
+    fun saveNewsFeedIds(username: String, feedCreator: String, feedIds: List<String>): Mono<Long> {
+        val tuples: Collection<ZSetOperations.TypedTuple<Any>> =
+            feedIds.mapNotNull { feedId ->
+                val score = feedId.toLongOrNull()?.toDouble() ?: return@mapNotNull null
+                ZSetOperations.TypedTuple.of(feedCreator, score)
+            }
+        if (tuples.isEmpty()) return Mono.just(0L)
+        return reactiveRedisTemplate.opsForZSet().addAll(key + username, tuples)
     }
+
+    fun getNewsFeedSize(username: String): Mono<Long> {
+        return reactiveRedisTemplate.opsForZSet().size(key + username);
+    }
+
 }
