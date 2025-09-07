@@ -18,18 +18,29 @@ class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTempla
      *  Get news feed ids of news feed after the given last feed id from redis zset.
      */
     fun getNewsFeedIds(username: String, size: Int, lastFeedId: String): Flux<Long> {
+        var count = size
+        if (size !in 0..defaultPageSize) {
+            count = defaultPageSize
+        }
+
+        val range =
+            if (lastFeedId.isEmpty()) Range.unbounded()
+            else Range.rightUnbounded(Range.Bound.inclusive(lastFeedId.toDouble()))
         return reactiveRedisTemplate.opsForZSet()
-            .reverseRangeByScore(key + username,
-                Range.rightUnbounded(Range.Bound.inclusive(lastFeedId.toDouble())),
-                Limit.limit().count(defaultPageSize))
-            .mapNotNull { feedId -> feedId as? Long }
+            .reverseRangeByScoreWithScores(
+                key + username,
+                range,
+                Limit.limit().count(count)
+            )
+            .mapNotNull { tuple -> tuple.score?.toLong() }
     }
 
     fun saveNewsFeedIds(username: String, feedCreator: String, feedIds: List<String>): Mono<Long> {
         val tuples: Collection<ZSetOperations.TypedTuple<Any>> =
-            feedIds.mapNotNull { feedId ->
-                val score = feedId.toLongOrNull()?.toDouble() ?: return@mapNotNull null
-                ZSetOperations.TypedTuple.of(feedCreator, score)
+            feedIds.map { feedId ->
+                val score = feedId.toLong().toDouble()
+                val member = feedCreator + feedId
+                ZSetOperations.TypedTuple.of(member, score)
             }
         if (tuples.isEmpty()) return Mono.just(0L)
         return reactiveRedisTemplate.opsForZSet().addAll(key + username, tuples)

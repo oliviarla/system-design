@@ -27,7 +27,11 @@ class IdGenerationService(
         val client = webClientFactory.getClient()
 
         return client.get()
-            .uri("/generate")
+            .uri { builder ->
+                builder.path("/min")
+                    .queryParam("time", instant.toEpochMilli())
+                    .build()
+            }
             .accept(MediaType.TEXT_PLAIN)
             .retrieve()
             .bodyToMono(String::class.java)
@@ -37,7 +41,11 @@ class IdGenerationService(
         val client = webClientFactory.getClient()
 
         return client.get()
-            .uri("/generate")
+            .uri { builder ->
+                builder.path("/max")
+                    .queryParam("time", instant.toEpochMilli())
+                    .build()
+            }
             .accept(MediaType.TEXT_PLAIN)
             .retrieve()
             .bodyToMono(String::class.java)

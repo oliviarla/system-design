@@ -4,47 +4,54 @@ import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
 import com.x.feedapp.user.service.FollowService
-import com.x.feedapp.user.service.UserService
+import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+@Service
 class NewsFeedService(
     private val feedRedisRepository: FeedRedisRepository,
     private val feedDBRepository: FeedDBRepository,
-    private val userService: UserService,
     private val followService: FollowService,
     private val feedService: FeedService
 ) {
+    /**
+     * 1. Redis에서 뉴스피드 ID들을 조회
+     * 2. 조회된 ID들이 size보다 작다면 팔로잉 유저들의 이전 피드들을 조합해 Redis에 추가
+     * 3. 다시 Redis에서 뉴스피드 ID들을 조회
+     * 4. 조회된 ID들로 피드 상세 정보를 조회해 반환
+     */
     fun getNewsFeed(username: String, size: Int, lastFeedId: String): Flux<Feed> {
         return feedRedisRepository.getNewsFeedIds(username, size, lastFeedId)
+            .map { it.toString() }
             .collectList()
-            .flatMapMany { feedIds ->
-                if (feedIds.size >= size) {
-                    return@flatMapMany Flux.fromIterable(feedIds)
-                } else {
-                    // 조회된 feed ids가 size 보다 작다면
-                    // 피드들을 조합해 ZSET에 추가한 후 다시 조회
-                    combineNewsFeedIds(username, size, lastFeedId)
-                        .then(Mono.defer {
-                            feedRedisRepository.getNewsFeedIds(username, size, lastFeedId)
-                                .collectList()
-                        })
-                        .flatMapMany { updatedFeedIds ->
-                            Flux.fromIterable(updatedFeedIds)
-                        }
-                }
-            }
-            .flatMap { feedId -> feedDBRepository.findById(feedId.toString()) }
+            .filter { it.size >= size }
+            .switchIfEmpty(
+                combineNewsFeedIds(username, size, lastFeedId)
+                    .then(Mono.defer {
+                        feedRedisRepository
+                            .getNewsFeedIds(username, size, lastFeedId)
+                            .map { it.toString() }
+                            .collectList()
+                    })
+            )
+            .filter { it.isNotEmpty() }
+            .flatMapMany { feedIds -> feedDBRepository.findAllById(feedIds) }
     }
 
+
     private fun combineNewsFeedIds(username: String, size: Int, lastFeedId: String): Mono<Unit> {
-        return feedService.getFeed(lastFeedId)
-            .flatMap { feed ->
-                val lastCreatedAt = feed.createdAt ?: return@flatMap Mono.empty()
-                expandTimeRangeAndFetchFeeds(username, lastCreatedAt, size)
-            }
+        return if (lastFeedId.isEmpty()) {
+            expandTimeRangeAndFetchFeeds(username, Instant.now(), size)
+        } else {
+            feedService.getFeed(lastFeedId)
+                .flatMap { feed ->
+                    val lastCreatedAt = feed.createdAt ?: return@flatMap Mono.empty()
+                    expandTimeRangeAndFetchFeeds(username, lastCreatedAt, size)
+                }
+        }
     }
 
     private fun expandTimeRangeAndFetchFeeds(
@@ -54,9 +61,6 @@ class NewsFeedService(
         dayRange: Int = 1,
         maxDayRange: Int = 3  // 최대 3일까지만 확장
     ): Mono<Unit> {
-        val start = lastCreatedAt.minus(dayRange.toLong(), ChronoUnit.DAYS)
-        val end = lastCreatedAt
-
         return followService.getFollowings(username)
             .collectList()
             .flatMap { followingIds ->
@@ -65,9 +69,13 @@ class NewsFeedService(
                 }
 
                 Flux.fromIterable(followingIds)
-                    // 각 사용자마다 주어진 시간 범위 내의 피드 ID를 가져와서 Redis에 저장
                     .flatMap { followingId ->
-                        feedService.getFeedIdsBetweenDates(followingId, start, end)
+                        feedService
+                            .getFeedIdsBetweenDates(
+                                followingId,
+                                lastCreatedAt.minus(dayRange.toLong(), ChronoUnit.DAYS),
+                                lastCreatedAt.minus(dayRange.toLong() - 1, ChronoUnit.DAYS)
+                            )
                             .collectList()
                             .flatMap { feedIds ->
                                 feedRedisRepository.saveNewsFeedIds(username, followingId, feedIds.toList())
@@ -75,11 +83,11 @@ class NewsFeedService(
                     }
                     .then(feedRedisRepository.getNewsFeedSize(username))
                     .flatMap { feedSize ->
-                        if (feedSize < size && dayRange < maxDayRange) {
+                        if (feedSize in 0..<size && dayRange < maxDayRange) {
                             // 피드가 충분하지 않고 최대 범위에 도달하지 않았으면 시간 범위 확장
                             expandTimeRangeAndFetchFeeds(username, lastCreatedAt, size, dayRange + 1, maxDayRange)
                         } else {
-                            // 최대 범위까지 확장했거나 충분한 데이터를 얻었으면 완료
+                            // 최대 범위까지 확장했거나, 충분한 데이터를 얻었으면 완료
                             Mono.empty()
                         }
                     }
