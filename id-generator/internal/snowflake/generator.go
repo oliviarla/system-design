@@ -50,3 +50,12 @@ func (g *Generator) Generate() int64 {
 		(g.nodeID << nodeShift) |
 		(g.sequence)
 }
+
+func (g *Generator) MaxID(unixTimeInMillis int64) int64 {
+	ms := unixTimeInMillis - epoch
+	return (ms << timeShift) | (int64(maxNodeID) << nodeShift) | int64(maxSequence)
+}
+
+func (g *Generator) MinID(unixTimeInMillis int64) int64 {
+	return (unixTimeInMillis - epoch) << timeShift
+}
