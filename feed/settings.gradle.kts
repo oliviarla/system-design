@@ -10,6 +10,6 @@ plugins {
 }
 
 rootProject.name = "feed"
+include("UserApp")
 include("FeedApp")
-
 include("FanOutApp")
