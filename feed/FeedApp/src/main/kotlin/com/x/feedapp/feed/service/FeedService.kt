@@ -8,12 +8,12 @@ import com.x.feedapp.feed.repository.FeedByUserRepository
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
 import com.x.feedapp.feed.repository.KafkaProducer
-import com.x.feedapp.user.service.UserService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.data.cassandra.core.query.CassandraPageRequest
 import org.springframework.data.domain.Slice
 import org.springframework.data.domain.SliceImpl
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -25,7 +25,6 @@ class FeedService(
     private val feedDBRepository: FeedDBRepository,
     private val feedByUserRepository: FeedByUserRepository,
     private val feedRedisRepository: FeedRedisRepository,
-    private val userService: UserService,
     private val idGenerationService: IdGenerationService,
     private val kafkaProducer: KafkaProducer
 ) {
@@ -95,7 +94,8 @@ class FeedService(
     }
 
     fun findMyFeeds(pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
-        return userService.findAuthentication()
+        return ReactiveSecurityContextHolder.getContext()
+            .map { context -> context.authentication.principal as String }
             .flatMap { username -> getFeedsByUser(username, pageRequest) }
     }
 

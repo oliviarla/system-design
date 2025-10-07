@@ -1,3 +1,5 @@
+server:
+    port: 8084
 spring:
   cassandra:
     contact-points: localhost
@@ -15,3 +17,5 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   snowflake:
     urls: http://localhost:9713
+jwt:
+    secret: your_jwt_secret_key

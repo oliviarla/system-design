@@ -3,7 +3,6 @@ package com.x.feedapp.feed.service
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
-import com.x.feedapp.user.service.FollowService
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono

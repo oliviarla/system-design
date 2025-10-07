@@ -19,11 +19,14 @@ repositories {
 }
 
 dependencies {
+	// Modules
+	implementation(project(":UserApp"))
+
 	// Spring
 	implementation("org.springframework.boot:spring-boot-starter-webflux")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
-	implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-security")
 
 	// GraplQL
 	implementation("org.springframework.boot:spring-boot-starter-graphql")
@@ -37,6 +40,11 @@ dependencies {
 
 	// DB
 	implementation("org.springframework.data:spring-data-cassandra")
+
+	// JWT
+	implementation("io.jsonwebtoken:jjwt-api")
+	runtimeOnly("io.jsonwebtoken:jjwt-impl")
+	runtimeOnly("io.jsonwebtoken:jjwt-jackson")
 
 	// Messaging
 	implementation("org.springframework.kafka:spring-kafka")
