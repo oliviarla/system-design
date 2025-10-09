@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS feed_app.user
     username text PRIMARY KEY,
     password text,
     created_at timestamp,
+    following_count int,
+    follower_count int
 );
 
 CREATE TABLE IF NOT EXISTS feed_app.following_by_user (
@@ -33,10 +35,9 @@ CREATE TABLE IF NOT EXISTS feed_app.feeds_by_user (
 ) WITH CLUSTERING ORDER BY (feed_id DESC);
 
 CREATE TABLE IF NOT EXISTS feed_app.feeds_by_id (
-    feed_id text,
+    feed_id bigint PRIMARY KEY,
     username text,
     created_at timestamp,
     updated_at timestamp,
-    content text,
-    PRIMARY KEY (feed_id)
+    content text
 );
