@@ -37,6 +37,9 @@ dependencies {
 	// Cache
 	implementation("org.springframework.session:spring-session-data-redis")
 
+    // Messaging
+    implementation("org.springframework.kafka:spring-kafka")
+
 	// Testing
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("io.projectreactor:reactor-test")

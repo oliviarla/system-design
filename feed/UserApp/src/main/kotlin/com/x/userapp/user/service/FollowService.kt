@@ -7,6 +7,7 @@ import com.x.userapp.user.domain.FollowingKey
 import com.x.userapp.user.repository.FollowRedisRepository
 import com.x.userapp.user.repository.FollowerByUserRepository
 import com.x.userapp.user.repository.FollowingByUserRepository
+import com.x.userapp.user.repository.KafkaProducer
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -17,7 +18,8 @@ import reactor.kotlin.core.util.function.component2
 class FollowService(
     private val followingByUserRepository: FollowingByUserRepository,
     private val followerByUserRepository: FollowerByUserRepository,
-    private val followRedisRepository: FollowRedisRepository
+    private val followRedisRepository: FollowRedisRepository,
+    private val kafkaProducer: KafkaProducer
 ) {
     fun getFollowings(username: String): Flux<String> {
         return followingByUserRepository.findAllByKeyUsername(username)
@@ -66,14 +68,11 @@ class FollowService(
                             .then(Mono.error(error))
                     }
             }
-            .flatMap { savedFollower ->
+            .flatMap {
                 followRedisRepository.incrFollowCount(currentUsername, usernameToFollow)
-                    .onErrorResume { error ->
-                        // Rollback: delete both records if Redis increment fails
-                        followingByUserRepository.delete(following)
-                            .then(followerByUserRepository.delete(savedFollower))
-                            .then(Mono.error(error))
-                    }
+                // TODO: handle error. do not rollback.
+            }.flatMap {
+                kafkaProducer.sendMessage(TOPIC_USER_FOLLOW, "$currentUsername $usernameToFollow")
             }
             .then()
     }
@@ -93,7 +92,6 @@ class FollowService(
         val followingKey = FollowingKey(currentUsername, usernameToUnfollow)
         val followerKey = FollowerKey(usernameToUnfollow, currentUsername)
         val following = FollowingByUser(key = followingKey)
-        val follower = FollowerByUser(key = followerKey)
 
         return followingByUserRepository.deleteById(followingKey)
             .flatMap {
@@ -106,13 +104,15 @@ class FollowService(
             }
             .flatMap {
                 followRedisRepository.decrFollowCount(currentUsername, usernameToUnfollow)
-                    .onErrorResume { error ->
-                        // Rollback: restore both records if Redis decrement fails
-                        followingByUserRepository.save(following)
-                            .then(followerByUserRepository.save(follower))
-                            .then(Mono.error(error))
-                    }
+                // TODO: handle error. do not rollback.
+            }.flatMap {
+                kafkaProducer.sendMessage(TOPIC_USER_UNFOLLOW, "$currentUsername $usernameToUnfollow")
             }
             .then()
+    }
+
+    companion object {
+        const val TOPIC_USER_FOLLOW = "user-follow"
+        const val TOPIC_USER_UNFOLLOW = "user-unfollow"
     }
 }
