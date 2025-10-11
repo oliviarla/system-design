@@ -8,6 +8,8 @@ import com.x.userapp.user.repository.FollowRedisRepository
 import com.x.userapp.user.repository.FollowerByUserRepository
 import com.x.userapp.user.repository.FollowingByUserRepository
 import com.x.userapp.user.repository.KafkaProducer
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -70,7 +72,10 @@ class FollowService(
             }
             .flatMap {
                 followRedisRepository.incrFollowCount(currentUsername, usernameToFollow)
-                // TODO: handle error. do not rollback.
+                    .doOnError { error ->
+                        logger.error("Failed to increment follow count in Redis for $currentUsername -> $usernameToFollow", error)
+                    }
+                    .onErrorResume { Mono.empty() }
             }.flatMap {
                 kafkaProducer.sendMessage(TOPIC_USER_FOLLOW, "$currentUsername $usernameToFollow")
             }
@@ -104,7 +109,10 @@ class FollowService(
             }
             .flatMap {
                 followRedisRepository.decrFollowCount(currentUsername, usernameToUnfollow)
-                // TODO: handle error. do not rollback.
+                    .doOnError { error ->
+                        logger.error("Failed to decrement follow count in Redis for $currentUsername -> $usernameToUnfollow", error)
+                    }
+                    .onErrorResume { Mono.empty() }
             }.flatMap {
                 kafkaProducer.sendMessage(TOPIC_USER_UNFOLLOW, "$currentUsername $usernameToUnfollow")
             }
@@ -112,6 +120,7 @@ class FollowService(
     }
 
     companion object {
+        private val logger: Logger = LoggerFactory.getLogger(FollowService::class.java)
         const val TOPIC_USER_FOLLOW = "user-follow"
         const val TOPIC_USER_UNFOLLOW = "user-unfollow"
     }
