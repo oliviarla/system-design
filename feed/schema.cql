@@ -1,10 +1,16 @@
+CREATE KEYSPACE user_app
+    WITH replication = {
+        'class': 'SimpleStrategy',
+        'replication_factor': 1
+        };
+
 CREATE KEYSPACE feed_app
     WITH replication = {
         'class': 'SimpleStrategy',
         'replication_factor': 1
         };
 
-CREATE TABLE IF NOT EXISTS feed_app.user
+CREATE TABLE IF NOT EXISTS user_app.user
 (
     username text PRIMARY KEY,
     password text,
@@ -13,14 +19,14 @@ CREATE TABLE IF NOT EXISTS feed_app.user
     follower_count int
 );
 
-CREATE TABLE IF NOT EXISTS feed_app.following_by_user (
+CREATE TABLE IF NOT EXISTS user_app.following_by_user (
     username text,
     following_username text,
     followed_at timestamp,
     PRIMARY KEY (username, following_username)
 );
 
-CREATE TABLE IF NOT EXISTS feed_app.follower_by_user (
+CREATE TABLE IF NOT EXISTS user_app.follower_by_user (
     username text,
     follower_username text,
     followed_at timestamp,

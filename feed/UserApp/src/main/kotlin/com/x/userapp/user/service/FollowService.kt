@@ -69,17 +69,18 @@ class FollowService(
                         followingByUserRepository.delete(savedFollowing)
                             .then(Mono.error(error))
                     }
-            }
-            .flatMap {
+            }.then(
                 followRedisRepository.incrFollowCount(currentUsername, usernameToFollow)
                     .doOnError { error ->
-                        logger.error("Failed to increment follow count in Redis for $currentUsername -> $usernameToFollow", error)
+                        logger.error(
+                            "Failed to increment follow count in Redis for $currentUsername -> $usernameToFollow",
+                            error
+                        )
                     }
                     .onErrorResume { Mono.empty() }
-            }.flatMap {
+            ).then(
                 kafkaProducer.sendMessage(TOPIC_USER_FOLLOW, "$currentUsername $usernameToFollow")
-            }
-            .then()
+            )
     }
 
     fun unfollow(currentUsername: String, usernameToUnfollow: String): Mono<Void> {
@@ -99,24 +100,68 @@ class FollowService(
         val following = FollowingByUser(key = followingKey)
 
         return followingByUserRepository.deleteById(followingKey)
-            .flatMap {
+            .onErrorResume {
+                Mono.error(RuntimeException("Failed to delete following record.", it))
+            }
+            .then(
                 followerByUserRepository.deleteById(followerKey)
                     .onErrorResume { error ->
                         // Rollback: restore the following record if follower delete fails
                         followingByUserRepository.save(following)
                             .then(Mono.error(error))
                     }
-            }
-            .flatMap {
+            )
+            .then(
                 followRedisRepository.decrFollowCount(currentUsername, usernameToUnfollow)
                     .doOnError { error ->
-                        logger.error("Failed to decrement follow count in Redis for $currentUsername -> $usernameToUnfollow", error)
+                        logger.error(
+                            "Failed to decrement follow count in Redis for $currentUsername -> $usernameToUnfollow",
+                            error
+                        )
                     }
                     .onErrorResume { Mono.empty() }
-            }.flatMap {
+            )
+            .then(
                 kafkaProducer.sendMessage(TOPIC_USER_UNFOLLOW, "$currentUsername $usernameToUnfollow")
+            )
+    }
+
+    fun getFollowingCount(username: String): Mono<Long> {
+        return followRedisRepository.getFollowingCount(username)
+            .onErrorResume { error ->
+                logger.error("Failed to get following count from Redis for $username, falling back to ScyllaDB", error)
+                followingByUserRepository.countByKeyUsername(username)
+                    .flatMap {
+                        followRedisRepository.setFollowingCount(username, it)
+                            .thenReturn(it)
+                    }
             }
-            .then()
+            .switchIfEmpty(
+                followingByUserRepository.countByKeyUsername(username)
+                    .flatMap {
+                        followRedisRepository.setFollowingCount(username, it)
+                            .thenReturn(it)
+                    }
+            )
+    }
+
+    fun getFollowerCount(username: String): Mono<Long> {
+        return followRedisRepository.getFollowerCount(username)
+            .onErrorResume { error ->
+                logger.error("Failed to get follower count from Redis for $username, falling back to ScyllaDB", error)
+                followerByUserRepository.countByKeyUsername(username)
+                    .flatMap {
+                        followRedisRepository.setFollowerCount(username, it)
+                            .thenReturn(it)
+                    }
+            }
+            .switchIfEmpty(
+                followerByUserRepository.countByKeyUsername(username)
+                    .flatMap {
+                        followRedisRepository.setFollowerCount(username, it)
+                            .thenReturn(it)
+                    }
+            )
     }
 
     companion object {

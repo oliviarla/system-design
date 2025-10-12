@@ -3,7 +3,6 @@ package com.x.userapp.user.repository
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.kafka.support.SendResult
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Mono
 import reactor.kotlin.core.publisher.toMono
@@ -15,7 +14,7 @@ class KafkaProducer(private val kafkaTemplate: KafkaTemplate<String, String>) {
         private val logger: Logger = LoggerFactory.getLogger(KafkaProducer::class.java)
     }
 
-    fun sendMessage(topic: String, message: String): Mono<SendResult<String, String>> {
+    fun sendMessage(topic: String, message: String): Mono<Void> {
         return kafkaTemplate.send(topic, message)
             .whenComplete { result, ex ->
                 when {
@@ -24,5 +23,6 @@ class KafkaProducer(private val kafkaTemplate: KafkaTemplate<String, String>) {
                 }
             }
             .toMono()
+            .then()
     }
 }

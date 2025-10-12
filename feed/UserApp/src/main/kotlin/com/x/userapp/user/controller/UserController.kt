@@ -17,8 +17,10 @@ import reactor.core.publisher.Mono
 
 @RestController
 @RequestMapping("/api/v1/users")
-class UserController(private val userService: UserService,
-    private val followService: FollowService) {
+class UserController(
+    private val userService: UserService,
+    private val followService: FollowService
+) {
 
     @PostMapping("/join")
     fun join(@RequestBody joinRequest: JoinRequest): Mono<ResponseEntity<Unit>> {
@@ -73,5 +75,15 @@ class UserController(private val userService: UserService,
             .flatMap { currentUsername ->
                 followService.unfollow(currentUsername, username)
             }
+    }
+
+    @GetMapping("/followings/count/{username}")
+    fun followingsCountByUsername(@PathVariable username: String): Mono<Long> {
+        return followService.getFollowingCount(username)
+    }
+
+    @GetMapping("/followers/count/{username}")
+    fun followersCountByUsername(@PathVariable username: String): Mono<Long> {
+        return followService.getFollowerCount(username)
     }
 }
