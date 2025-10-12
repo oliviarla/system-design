@@ -1,0 +1,22 @@
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: feed-consumer-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cassandra:
+    contact-points: localhost
+    port: 9042
+    keyspace-name: feed_app
+    schema-action: CREATE_IF_NOT_EXISTS
+    connection:
+      connect-timeout: 5s
+      init-query-timeout: 5s
+    local-datacenter: datacenter1
