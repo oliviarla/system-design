@@ -1,11 +1,16 @@
 package com.x.fanOutApp.service
 
+import io.github.resilience4j.reactor.retry.RetryOperator
+import io.github.resilience4j.retry.Retry
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
+import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.time.Duration
@@ -13,6 +18,10 @@ import java.time.Duration
 @Service
 class FeedCreationConsumer(
     private val reactiveRedisTemplate: ReactiveRedisTemplate<String, Any>,
+    private val webClient: WebClient,
+    private val retry: Retry,
+    private val kafkaTemplate: KafkaTemplate<String, String>,
+    @field:Value("\${spring.services.user-service-url}") private val userServiceUrl: String
 ) {
     private val logger: Logger = LoggerFactory.getLogger(FeedCreationConsumer::class.java)
     private val newsFeedCacheKey: (String) -> String = { username -> "news_feed:$username" }
@@ -70,8 +79,8 @@ class FeedCreationConsumer(
                     getFanOutFollowers(username)
                         .buffer(BATCH_SIZE)
                         .delayElements(Duration.ofMillis(10)) // Add small delay between batches
-                        .flatMap { followerBatch ->
-                            addFeedToNewsFeed(followerBatch, username, feedId)
+                        .flatMap { followersChunk ->
+                            addFeedToNewsFeed(followersChunk, username, feedId)
                         }
                         .reduce(true) { acc, _ -> acc }
                 }
@@ -79,18 +88,27 @@ class FeedCreationConsumer(
     }
 
     private fun getFollowerCount(username: String): Mono<Long> {
-        return reactiveRedisTemplate.opsForValue()["follower_count:$username"]
-            .flatMap { Mono.just((it as String).toLong()) }
-            .switchIfEmpty(
-                // TODO: Replace with actual Cassandra call to get follower count
-                Mono.just(100L) // Placeholder
-            )
+        return webClient.get()
+            .uri("$userServiceUrl/api/follower/count/$username")
+            .retrieve()
+            .bodyToMono(Long::class.java)
+            .doOnError { error ->
+                logger.error("Failed to get follower count for $username from user service", error)
+            }
+            .onErrorReturn(0L)
     }
 
     fun getFanOutFollowers(username: String): Flux<String> {
-        // TODO: Implement follower retrieval with pagination
-        // Consider using cursor-based pagination for large datasets
-        return Flux.fromIterable(listOf("follower1", "follower2", "follower3")) // Placeholder
+        return webClient.get()
+            .uri("$userServiceUrl/api/follower/$username")
+            .retrieve()
+            .bodyToFlux(String::class.java)
+            .doOnError { error ->
+                logger.error("Failed to get followers for $username from user service", error)
+            }
+            .onErrorResume {
+                Flux.empty()
+            }
     }
 
     private fun addFeedToNewsFeed(followers: List<String>, username: String, feedId: String): Mono<Boolean> {
@@ -113,10 +131,30 @@ class FeedCreationConsumer(
                 )
                     .next()
                     .map { l -> l > 0 }
-                    .onErrorReturn(false)
+                    .transformDeferred(RetryOperator.of(retry))
+                    .onErrorResume { error ->
+                        logger.error("Failed to add feed to news feed after retries for follower: $follower", error)
+                        sendToDeadLetterQueue(username, feedId, follower, error)
+                        Mono.just(false)
+                    }
             }
             .collectList()
             .map { results -> results.all { it } }
+    }
+
+    private fun sendToDeadLetterQueue(username: String, feedId: String, follower: String, error: Throwable): Mono<Void> {
+        val dlqMessage = "username=$username,feedId=$feedId,follower=$follower,error=${error.message}"
+        return Mono.fromFuture(
+            kafkaTemplate.send("feed-creation-dlq", dlqMessage)
+        )
+            .doOnSuccess {
+                logger.info("Sent failed message to DLQ: $dlqMessage")
+            }
+            .doOnError { dlqError ->
+                logger.error("Failed to send message to DLQ: $dlqMessage", dlqError)
+            }
+            .then()
+            .onErrorResume { Mono.empty() }
     }
 
     companion object {

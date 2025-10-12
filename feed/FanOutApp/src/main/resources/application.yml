@@ -20,3 +20,6 @@ spring:
       connect-timeout: 5s
       init-query-timeout: 5s
     local-datacenter: datacenter1
+  services:
+    user-service-url: http://localhost:8083
+    feed-service-url: http://localhost:8084
