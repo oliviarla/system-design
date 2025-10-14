@@ -13,3 +13,4 @@ rootProject.name = "feed"
 include("UserApp")
 include("FeedApp")
 include("FanOutApp")
+include("GatewayApp")
