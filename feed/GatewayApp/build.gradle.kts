@@ -23,12 +23,17 @@ extra["springCloudVersion"] = "2024.0.0"
 dependencies {
 	// Spring Cloud Gateway
 	implementation("org.springframework.cloud:spring-cloud-starter-gateway")
-
-	// Spring Boot Actuator for monitoring
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-security")
 
-	// Redis for rate limiting (optional)
+	// Redis for session management
 	implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
+	implementation("org.springframework.session:spring-session-data-redis")
+
+	// JWT
+	implementation("io.jsonwebtoken:jjwt-api:0.12.3")
+	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
+	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")
 
 	// Kotlin
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
