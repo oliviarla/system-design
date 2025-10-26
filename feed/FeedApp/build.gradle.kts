@@ -42,9 +42,9 @@ dependencies {
 	implementation("org.springframework.data:spring-data-cassandra")
 
 	// JWT
-	implementation("io.jsonwebtoken:jjwt-api")
-	runtimeOnly("io.jsonwebtoken:jjwt-impl")
-	runtimeOnly("io.jsonwebtoken:jjwt-jackson")
+    implementation("io.jsonwebtoken:jjwt-api:0.12.3")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")
 
 	// Messaging
 	implementation("org.springframework.kafka:spring-kafka")
