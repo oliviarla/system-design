@@ -19,15 +19,24 @@ class CustomServerSecurityContextRepository : ServerSecurityContextRepository {
 
     override fun load(exchange: ServerWebExchange): Mono<SecurityContext> {
         return exchange.session
+            .onErrorResume { _ ->
+                // Handle any session-related errors (including invalidation)
+                Mono.empty()
+            }
             .flatMap { session: WebSession ->
-                val principal = session.getAttribute<Any>("principal")
-                val authorities = session.getAttribute<Set<SimpleGrantedAuthority>>("authorities")
-                if (principal == null || CollectionUtils.isEmpty(authorities)) {
-                    return@flatMap Mono.empty()
+                try {
+                    val principal = session.getAttribute<Any>("principal")
+                    val authorities = session.getAttribute<Set<SimpleGrantedAuthority>>("authorities")
+                    if (principal == null || CollectionUtils.isEmpty(authorities)) {
+                        return@flatMap Mono.empty()
+                    }
+                    val authentication: Authentication =
+                        UsernamePasswordAuthenticationToken(principal, null, authorities)
+                    Mono.just<SecurityContextImpl>(SecurityContextImpl(authentication))
+                } catch (e: IllegalStateException) {
+                    // Session was invalidated while we were accessing it
+                    Mono.empty()
                 }
-                val authentication: Authentication =
-                    UsernamePasswordAuthenticationToken(principal, null, authorities)
-                Mono.just<SecurityContextImpl>(SecurityContextImpl(authentication))
             }
     }
 }

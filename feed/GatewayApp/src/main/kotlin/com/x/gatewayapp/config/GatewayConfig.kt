@@ -14,10 +14,15 @@ class GatewayConfig(
     @Bean
     fun customRouteLocator(builder: RouteLocatorBuilder): RouteLocator {
         return builder.routes()
-            // UserApp routes - port 8083
-            // Do not have to pass JWT here, as UserApp handles authentication itself.
+            .route("user-login/out") { r ->
+                r.path("/api/v1/users/login", "/api/v1/users/logout")
+                    .uri("http://localhost:8083")
+            }
             .route("user-service") { r ->
                 r.path("/api/v1/users/**")
+                    .filters { f ->
+                        f.filter(securityContextToJwtFilterFactory.apply(SecurityContextToJwtGatewayFilterFactory.Config()))
+                    }
                     .uri("http://localhost:8083")
             }
             // FeedApp routes - port 8084

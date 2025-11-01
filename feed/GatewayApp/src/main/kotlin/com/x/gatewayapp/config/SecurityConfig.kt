@@ -21,6 +21,7 @@ class SecurityConfig {
         http.headers { configurer -> configurer.frameOptions(ServerHttpSecurity.HeaderSpec.FrameOptionsSpec::disable) }
         http.httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
         http.formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+        http.logout { logoutSpec -> logoutSpec.disable() }
         http.securityContextRepository(serverSecurityContextRepository())
         // TODO: For now, each strict is handled in the individual microservices. Make it stricter later. ex) use anonymous user.
         http.authorizeExchange { authorize ->
