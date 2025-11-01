@@ -1,4 +1,4 @@
-package com.x.userapp.user.security
+package com.x.userapp.security
 
 import org.springframework.security.authentication.UserDetailsRepositoryReactiveAuthenticationManager
 import org.springframework.security.crypto.password.PasswordEncoder

@@ -1,4 +1,4 @@
-package com.x.userapp.user.security
+package com.x.userapp.security
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.core.io.buffer.DataBuffer

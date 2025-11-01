@@ -1,4 +1,4 @@
-package com.x.userapp.user.security
+package com.x.userapp.security
 
 data class LoginRequest(
     val username: String,

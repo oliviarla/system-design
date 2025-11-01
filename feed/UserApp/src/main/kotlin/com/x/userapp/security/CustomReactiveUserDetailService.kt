@@ -1,4 +1,4 @@
-package com.x.userapp.user.security
+package com.x.userapp.security
 
 import com.x.userapp.user.repository.UserRepository
 import org.springframework.security.core.authority.SimpleGrantedAuthority
