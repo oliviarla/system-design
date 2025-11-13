@@ -45,6 +45,8 @@ class FeedService(
                         feedByUserRepository.save(toFeedByUser(savedFeed).apply { markAsNew() })
                             .doOnNext { feedByUser ->
                                 kafkaProducer.sendFeedCreationMessage("$username ${feedByUser.id}")
+                            }.doOnNext {
+                                feedRedisRepository.addFeedToCache(username, savedFeed.feedId)
                             }
                             .thenReturn(savedFeed)
                     }
@@ -71,12 +73,16 @@ class FeedService(
         return feedDBRepository.findById(id)
             .flatMap { feed ->
                 if (feed.username == username) {
-                    feedDBRepository.deleteByFeedId(id).thenReturn(true)
+                    feedDBRepository.deleteByFeedId(id)
+                        .thenReturn(true)
                 } else {
                     Mono.just(false)
                 }
+            }.doOnSuccess { result ->
+                if (result) {
+                    feedRedisRepository.removeFeedFromCache(username, id)
+                }
             }
-        // TODO: 캐시의 피드도 삭제하기
     }
 
     fun getFeed(id: String): Mono<Feed> {
@@ -103,8 +109,8 @@ class FeedService(
         val fromId = idGenerationService.generateMinSnowflakeId(start)
         val toId = idGenerationService.generateMaxSnowflakeId(end)
         return Mono.zip(fromId, toId)
-            .flatMapMany {
-                tuple -> feedByUserRepository
+            .flatMapMany { tuple ->
+                feedByUserRepository
                     .findByKeyUsernameAndKeyFeedIdBetween(username, tuple.t1, tuple.t2)
             }
             .map { it.key.feedId }

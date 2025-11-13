@@ -1,5 +1,7 @@
 package com.x.feedapp.feed.repository
 
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Range
 import org.springframework.data.redis.connection.Limit
 import org.springframework.data.redis.core.ReactiveRedisTemplate
@@ -9,7 +11,10 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 @Repository
-class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTemplate<String, Any>) {
+class FeedRedisRepository(
+    private val reactiveRedisTemplate: ReactiveRedisTemplate<String, Any>,
+) {
+    private val logger: Logger = LoggerFactory.getLogger(FeedRedisRepository::class.java)
 
     private val key = "newsfeed:"
     private val defaultPageSize = 30
@@ -47,7 +52,26 @@ class FeedRedisRepository(private val reactiveRedisTemplate: ReactiveRedisTempla
     }
 
     fun getNewsFeedSize(username: String): Mono<Long> {
-        return reactiveRedisTemplate.opsForZSet().size(key + username);
+        return reactiveRedisTemplate.opsForZSet().size(key + username)
     }
 
+    /**
+     * Add a feed to user's cache (sorted set)
+     * key: feed:{userId}
+     * score: {feedId}
+     * member: {feedId}
+     */
+    fun addFeedToCache(userId: String, feedId: String): Mono<Boolean> {
+        val score = feedId.toLong().toDouble()
+        return reactiveRedisTemplate.opsForZSet()
+            .add("feed:$userId", feedId, score)
+    }
+
+    /**
+     * Remove a feed from user's cache (sorted set)
+     */
+    fun removeFeedFromCache(userId: String, feedId: String): Mono<Long> {
+        return reactiveRedisTemplate.opsForZSet()
+            .remove("feed:$userId", feedId)
+    }
 }
