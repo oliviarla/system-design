@@ -19,9 +19,6 @@ repositories {
 }
 
 dependencies {
-	// Modules
-	implementation(project(":UserApp"))
-
 	// GraplQL
 	implementation("org.springframework.boot:spring-boot-starter-graphql")
 	implementation("com.graphql-java:graphql-java")
