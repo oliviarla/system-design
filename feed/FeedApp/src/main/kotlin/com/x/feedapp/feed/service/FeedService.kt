@@ -89,20 +89,34 @@ class FeedService(
         return feedDBRepository.findById(id)
     }
 
-    fun getFeedsByUser(username: String, pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
-        return feedByUserRepository.findAllByKeyUsername(username, pageRequest)
-            .flatMap { slice ->
-                Flux.fromIterable(slice.content)
-                    .flatMap { feedByUser -> feedDBRepository.findById(feedByUser.key.feedId) }
+    fun getFeedsByUser(username: String, size: Int, lastFeedId: String?): Mono<Slice<Feed>> {
+        // Fetch size + 1 to determine if there are more pages
+        val fetchSize = size + 1
+
+        return (lastFeedId?.let { Mono.just(it) }
+            ?: idGenerationService.generateMaxSnowflakeId(Instant.now()))
+            .flatMap { effectiveLastFeedId ->
+                feedByUserRepository.findByKeyUsernameAndKeyFeedIdLessThan(username, effectiveLastFeedId, fetchSize)
                     .collectList()
-                    .map { feeds -> SliceImpl(feeds, slice.pageable, slice.hasNext()) }
+                    .flatMap { feedByUserList ->
+                        val hasNext = feedByUserList.size > size
+                        val feedsToReturn = if (hasNext) feedByUserList.take(size) else feedByUserList
+
+                        // Use concatMap to preserve order from the sorted feedByUserList
+                        Flux.fromIterable(feedsToReturn)
+                            .concatMap { feedByUser -> feedDBRepository.findById(feedByUser.key.feedId) }
+                            .collectList()
+                            .map { feeds ->
+                                SliceImpl(feeds, CassandraPageRequest.first(size), hasNext)
+                            }
+                    }
             }
     }
 
-    fun findMyFeeds(pageRequest: CassandraPageRequest): Mono<Slice<Feed>> {
+    fun findMyFeeds(size: Int, lastFeedId: String?): Mono<Slice<Feed>> {
         return ReactiveSecurityContextHolder.getContext()
             .map { context -> context.authentication.principal as String }
-            .flatMap { username -> getFeedsByUser(username, pageRequest) }
+            .flatMap { username -> getFeedsByUser(username, size, lastFeedId) }
     }
 
     fun getFeedIdsBetweenDates(username: String, start: Instant, end: Instant): Flux<String> {

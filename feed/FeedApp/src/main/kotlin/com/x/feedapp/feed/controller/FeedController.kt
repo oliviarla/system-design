@@ -7,8 +7,6 @@ import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.controller.dto.toFeedResponse
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.service.FeedService
-import org.springframework.data.cassandra.core.query.CassandraPageRequest
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Slice
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
@@ -21,8 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import reactor.core.publisher.Mono
-import java.nio.ByteBuffer
-import java.util.Base64
 
 @RestController
 @RequestMapping("/api/v1/feeds")
@@ -72,10 +68,9 @@ class FeedController(private val feedService: FeedService) {
     @GetMapping("/my")
     fun myFeeds(
         @RequestParam(defaultValue = "10") size: Int,
-        @RequestParam(required = false) pagingState: String?
+        @RequestParam(required = false) lastFeedId: String?
     ): Mono<PagedFeedResponse> {
-        val pageRequest = createPageRequest(size, pagingState)
-        return feedService.findMyFeeds(pageRequest)
+        return feedService.findMyFeeds(size, lastFeedId)
             .map { slice ->
                 createPageResponse(slice)
             }
@@ -85,47 +80,24 @@ class FeedController(private val feedService: FeedService) {
     fun getUserFeeds(
         @PathVariable username: String,
         @RequestParam(defaultValue = "10") size: Int,
-        @RequestParam(required = false) pagingState: String?
+        @RequestParam(required = false) lastFeedId: String?
     ): Mono<PagedFeedResponse> {
-        val pageRequest = createPageRequest(size, pagingState)
-        return feedService.getFeedsByUser(username, pageRequest)
+        return feedService.getFeedsByUser(username, size, lastFeedId)
             .map { slice ->
                 createPageResponse(slice)
             }
     }
 
-    private fun createPageResponse(slice: Slice<Feed>): PagedFeedResponse =
-        if (slice.nextPageable().isUnpaged) {
-            PagedFeedResponse(
-                feeds = slice.content.map { toFeedResponse(it) },
-                size = slice.size,
-                pagingState = null
-            )
-        } else {
-            val nextPagingState = (slice.nextPageable() as CassandraPageRequest)
-                .pagingState?.let { buf ->
-                    val bytes = ByteArray(buf.remaining())
-                    buf.get(bytes)
-                    Base64.getUrlEncoder().encodeToString(bytes)
-                }
-            PagedFeedResponse(
-                feeds = slice.content.map { toFeedResponse(it) },
-                size = slice.size,
-                pagingState = nextPagingState
-            )
-        }
+    private fun createPageResponse(slice: Slice<Feed>): PagedFeedResponse {
+        val feeds = slice.content.map { toFeedResponse(it) }
+        val lastFeedId = slice.content.lastOrNull()?.feedId ?: ""
+        val hasNext = slice.hasNext()
 
-    private fun createPageRequest(
-        size: Int,
-        pagingState: String?
-    ): CassandraPageRequest {
-        val pageRequest = pagingState?.let {
-            CassandraPageRequest.of(
-                PageRequest.ofSize(size),
-                ByteBuffer.wrap(Base64.getUrlDecoder().decode(pagingState))
-            )
-        }
-            ?: CassandraPageRequest.first(size)
-        return pageRequest
+        return PagedFeedResponse(
+            feeds = feeds,
+            size = feeds.size,
+            lastFeedId = lastFeedId,
+            hasNext = hasNext
+        )
     }
 }
