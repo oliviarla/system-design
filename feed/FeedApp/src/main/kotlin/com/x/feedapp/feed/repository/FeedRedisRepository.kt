@@ -22,15 +22,15 @@ class FeedRedisRepository(
     /**
      *  Get news feed ids of news feed after the given last feed id from redis zset.
      */
-    fun getNewsFeedIds(username: String, size: Int, lastFeedId: String): Flux<Long> {
+    fun getNewsFeedIds(username: String, size: Int, lastFeedId: String?): Flux<Long> {
         var count = size
         if (size !in 0..defaultPageSize) {
             count = defaultPageSize
         }
 
         val range =
-            if (lastFeedId.isEmpty()) Range.unbounded()
-            else Range.rightUnbounded(Range.Bound.inclusive(lastFeedId.toDouble()))
+            if (lastFeedId == null) Range.unbounded()
+            else Range.leftUnbounded(Range.Bound.exclusive(lastFeedId.toDouble()))
         return reactiveRedisTemplate.opsForZSet()
             .reverseRangeByScoreWithScores(
                 key + username,

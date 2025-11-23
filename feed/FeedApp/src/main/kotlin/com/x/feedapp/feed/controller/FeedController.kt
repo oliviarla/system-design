@@ -7,6 +7,7 @@ import com.x.feedapp.feed.controller.dto.UpdateFeedRequest
 import com.x.feedapp.feed.controller.dto.toFeedResponse
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.service.FeedService
+import com.x.feedapp.feed.service.NewsFeedService
 import org.springframework.data.domain.Slice
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
@@ -22,37 +23,45 @@ import reactor.core.publisher.Mono
 
 @RestController
 @RequestMapping("/api/v1/feeds")
-class FeedController(private val feedService: FeedService) {
+class FeedController(
+    private val feedService: FeedService,
+    private val newsFeedService: NewsFeedService
+) {
 
     @PostMapping
     fun createFeed(@RequestBody createFeedRequest: CreateFeedRequest): Mono<ResponseEntity<Unit>> {
         return ReactiveSecurityContextHolder.getContext()
-            .map { context -> context.authentication.principal as String }
-            .flatMap { username ->
+            .flatMap { context ->
+                val username = context.authentication.principal as String
                 feedService.createFeed(createFeedRequest, username)
-                    .thenReturn(ResponseEntity.ok().build())
+                    .thenReturn(ResponseEntity.ok().build<Unit>())
             }
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()))
     }
 
     @PostMapping("/update/{feedId}")
-    fun updateFeed(@PathVariable feedId: String, @RequestBody updateFeedRequest: UpdateFeedRequest): Mono<ResponseEntity<Unit>> {
+    fun updateFeed(
+        @PathVariable feedId: String,
+        @RequestBody updateFeedRequest: UpdateFeedRequest
+    ): Mono<ResponseEntity<Unit>> {
         return ReactiveSecurityContextHolder.getContext()
-            .map { context -> context.authentication.principal as String }
-            .flatMap { username ->
+            .flatMap { context ->
+                val username = context.authentication.principal as String
                 feedService.updateFeed(feedId, updateFeedRequest, username)
-                    .thenReturn(ResponseEntity.ok().build())
+                    .thenReturn(ResponseEntity.ok().build<Unit>())
             }
-
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()))
     }
 
     @DeleteMapping("/{feedId}")
     fun deleteFeed(@PathVariable feedId: String): Mono<ResponseEntity<Unit>> {
         return ReactiveSecurityContextHolder.getContext()
-            .map { context -> context.authentication.principal as String }
-            .flatMap { username ->
+            .flatMap { context ->
+                val username = context.authentication.principal as String
                 feedService.deleteFeed(feedId, username)
-                    .thenReturn(ResponseEntity.ok().build())
+                    .thenReturn(ResponseEntity.ok().build<Unit>())
             }
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()))
     }
 
     @GetMapping
@@ -69,11 +78,28 @@ class FeedController(private val feedService: FeedService) {
     fun myFeeds(
         @RequestParam(defaultValue = "10") size: Int,
         @RequestParam(required = false) lastFeedId: String?
-    ): Mono<PagedFeedResponse> {
-        return feedService.findMyFeeds(size, lastFeedId)
-            .map { slice ->
-                createPageResponse(slice)
+    ): Mono<ResponseEntity<PagedFeedResponse>> {
+        return ReactiveSecurityContextHolder.getContext()
+            .flatMap { context ->
+                val username = context.authentication.principal as String
+                feedService.getFeedsByUser(username, size, lastFeedId)
+                    .map { slice -> ResponseEntity.ok(createPageResponse(slice)) }
             }
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()))
+    }
+
+    @GetMapping("/my/news")
+    fun getNewsFeed(
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(required = false) lastFeedId: String?
+    ): Mono<ResponseEntity<PagedFeedResponse>> {
+        return ReactiveSecurityContextHolder.getContext()
+            .flatMap { context ->
+                val username = context.authentication.principal as String
+                newsFeedService.getNewsFeed(username, size, lastFeedId)
+                    .map { slice -> ResponseEntity.ok(createPageResponse(slice)) }
+            }
+            .switchIfEmpty(Mono.just(ResponseEntity.status(401).build()))
     }
 
     @GetMapping("/{username}")

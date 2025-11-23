@@ -19,6 +19,7 @@ interface FeedByUserRepository: ReactiveCrudRepository<FeedByUser, FeedKey> {
         limit: Int
     ): Flux<FeedByUser>
 
+    @Query("SELECT * FROM feeds_by_user WHERE username = ?0 AND feed_id >= ?1 AND feed_id <= ?2")
     fun findByKeyUsernameAndKeyFeedIdBetween(
         username: String,
         fromId: String,

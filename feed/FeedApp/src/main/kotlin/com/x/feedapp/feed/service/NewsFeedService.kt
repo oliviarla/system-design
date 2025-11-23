@@ -3,6 +3,9 @@ package com.x.feedapp.feed.service
 import com.x.feedapp.feed.domain.Feed
 import com.x.feedapp.feed.repository.FeedDBRepository
 import com.x.feedapp.feed.repository.FeedRedisRepository
+import org.springframework.data.cassandra.core.query.CassandraPageRequest
+import org.springframework.data.domain.Slice
+import org.springframework.data.domain.SliceImpl
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -17,13 +20,15 @@ class NewsFeedService(
     private val feedService: FeedService
 ) {
     /**
-     * 1. Redis에서 뉴스피드 ID들을 조회
+     * 1. Redis에서 뉴스피드 ID들을 조회 (size + 1개를 가져와서 hasNext 판단)
      * 2. 조회된 ID들이 size보다 작다면 팔로잉 유저들의 이전 피드들을 조합해 Redis에 추가
      * 3. 다시 Redis에서 뉴스피드 ID들을 조회
-     * 4. 조회된 ID들로 피드 상세 정보를 조회해 반환
+     * 4. 조회된 ID들로 피드 상세 정보를 조회해 Slice로 반환
      */
-    fun getNewsFeed(username: String, size: Int, lastFeedId: String): Flux<Feed> {
-        return feedRedisRepository.getNewsFeedIds(username, size, lastFeedId)
+    fun getNewsFeed(username: String, size: Int, lastFeedId: String?): Mono<Slice<Feed>> {
+        val fetchSize = size + 1
+
+        return feedRedisRepository.getNewsFeedIds(username, fetchSize, lastFeedId)
             .map { it.toString() }
             .collectList()
             .filter { it.size >= size }
@@ -31,18 +36,36 @@ class NewsFeedService(
                 combineNewsFeedIds(username, size, lastFeedId)
                     .then(Mono.defer {
                         feedRedisRepository
-                            .getNewsFeedIds(username, size, lastFeedId)
+                            .getNewsFeedIds(username, fetchSize, lastFeedId)
                             .map { it.toString() }
                             .collectList()
                     })
             )
-            .filter { it.isNotEmpty() }
-            .flatMapMany { feedIds -> feedDBRepository.findAllById(feedIds) }
+            .flatMap { feedIds ->
+                if (feedIds.isEmpty()) {
+                    // Return empty Slice when there are no feeds
+                    return@flatMap Mono.just(SliceImpl(emptyList(), CassandraPageRequest.first(size), false))
+                }
+
+                val hasNext = feedIds.size > size
+                val feedIdsToReturn = if (hasNext) feedIds.take(size) else feedIds
+
+                // Fetch feeds and maintain descending order by feedId
+                feedDBRepository.findAllById(feedIdsToReturn)
+                    .collectList()
+                    .map { feeds ->
+                        // Create a map for efficient lookup
+                        val feedMap = feeds.associateBy { it.feedId }
+                        // Maintain the order from feedIdsToReturn (descending by feedId)
+                        val orderedFeeds = feedIdsToReturn.mapNotNull { feedMap[it] }
+                        SliceImpl(orderedFeeds, CassandraPageRequest.first(size), hasNext)
+                    }
+            }
     }
 
 
-    private fun combineNewsFeedIds(username: String, size: Int, lastFeedId: String): Mono<Unit> {
-        return if (lastFeedId.isEmpty()) {
+    private fun combineNewsFeedIds(username: String, size: Int, lastFeedId: String?): Mono<Unit> {
+        return if (lastFeedId == null) {
             expandTimeRangeAndFetchFeeds(username, Instant.now(), size)
         } else {
             feedService.getFeed(lastFeedId)
@@ -61,7 +84,6 @@ class NewsFeedService(
         maxDayRange: Int = 3  // 최대 3일까지만 확장
     ): Mono<Unit> {
         return followService.getFollowings(username)
-            .collectList()
             .flatMap { followingIds ->
                 if (followingIds.isEmpty()) {
                     return@flatMap Mono.empty()

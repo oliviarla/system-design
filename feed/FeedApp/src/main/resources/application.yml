@@ -17,5 +17,7 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   snowflake:
     urls: http://localhost:9713
+  user-app:
+    url: http://localhost:8083
 jwt:
     secret: 24675e854c23f198b53695053c65ce96089e1e3f77ea43104f1a30e21406fa9c
