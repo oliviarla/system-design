@@ -42,6 +42,20 @@ services:
       - '9713:9713'
     environment:
       - NODE_ID=1
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: batch
+      MYSQL_USER: batch_user
+      MYSQL_PASSWORD: batch_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: always
 volumes:
   scylla-data:
   kafka-data:
+  mysql-data:

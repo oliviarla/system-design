@@ -10,7 +10,9 @@ import java.time.Duration
 class FollowRedisRepository(private val redisTemplate: ReactiveRedisTemplate<String, Any>) {
 
     companion object {
-        private val TTL_FOR_FOLLOW_COUNT = Duration.ofDays(2)
+        private val TTL_FOR_FOLLOW_COUNT = Duration.ofMinutes(5)
+        private val LOCK_TTL = Duration.ofSeconds(10)
+        private const val LOCK_KEY_PREFIX = "lock:followCount:"
     }
 
     fun setFollowingCount(username: String, count: Long): Mono<Boolean> {
@@ -23,52 +25,6 @@ class FollowRedisRepository(private val redisTemplate: ReactiveRedisTemplate<Str
             .set("user:followerCount:$username", count, TTL_FOR_FOLLOW_COUNT)
     }
 
-    fun decrFollowCount(currentUsername: String, usernameToUnfollow: String): Mono<Void> {
-        val script: RedisScript<Void> = RedisScript.of(
-            """
-            local followingKey = KEYS[1]
-            local followerKey = KEYS[2]
-            local ttl = ARGV[1]
-            if redis.call("exists", followingKey) == 1 then
-                redis.call("decr", followingKey)
-                redis.call("expire", followingKey, ttl)
-            end
-            if redis.call("exists", followerKey) == 1 then
-                redis.call("decr", followerKey)
-                redis.call("expire", followerKey, ttl)
-            end
-            """.trimIndent(), Void::class.java
-        )
-        return redisTemplate.execute(
-            script,
-            listOf("user:followingCount:$currentUsername", "user:followerCount:$usernameToUnfollow"),
-            TTL_FOR_FOLLOW_COUNT.seconds.toString()
-        ).then()
-    }
-
-    fun incrFollowCount(currentUsername: String, usernameToFollow: String): Mono<Void> {
-        val script: RedisScript<Void> = RedisScript.of(
-            """
-            local followingKey = KEYS[1]
-            local followerKey = KEYS[2]
-            local ttl = ARGV[1]
-            if redis.call("exists", followingKey) == 1 then
-                redis.call("incr", followingKey)
-                redis.call("expire", followingKey, ttl)
-            end
-            if redis.call("exists", followerKey) == 1 then
-                redis.call("incr", followerKey)
-                redis.call("expire", followerKey, ttl)
-            end
-            """.trimIndent(), Void::class.java
-        )
-        return redisTemplate.execute(
-            script,
-            listOf("user:followingCount:$currentUsername", "user:followerCount:$usernameToFollow"),
-            TTL_FOR_FOLLOW_COUNT.seconds.toString()
-        ).then()
-    }
-
     fun getFollowingCount(username: String): Mono<Long> {
         return redisTemplate.opsForValue()["user:followingCount:$username"]
             .map { it.toString().toLong() }
@@ -77,5 +33,23 @@ class FollowRedisRepository(private val redisTemplate: ReactiveRedisTemplate<Str
     fun getFollowerCount(username: String): Mono<Long> {
         return redisTemplate.opsForValue()["user:followerCount:$username"]
             .map { it.toString().toLong() }
+    }
+
+    /**
+     * Acquires a distributed lock using SETNX with TTL
+     * Returns true if lock was acquired, false otherwise
+     */
+    fun acquireLock(lockKey: String): Mono<Boolean> {
+        return redisTemplate.opsForValue()
+            .setIfAbsent("$LOCK_KEY_PREFIX$lockKey", "locked", LOCK_TTL)
+            .defaultIfEmpty(false)
+    }
+
+    /**
+     * Releases the distributed lock
+     */
+    fun releaseLock(lockKey: String): Mono<Boolean> {
+        return redisTemplate.opsForValue()
+            .delete("$LOCK_KEY_PREFIX$lockKey")
     }
 }
