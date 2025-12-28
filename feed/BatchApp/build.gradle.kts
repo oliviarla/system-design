@@ -19,17 +19,27 @@ repositories {
 }
 
 dependencies {
-    // Spring
-    implementation("org.springframework.session:spring-session-data-redis")
+	// Spring Boot
+	implementation("org.springframework.boot:spring-boot-starter-web")
+
+	// Spring Batch
+	implementation("org.springframework.boot:spring-boot-starter-batch")
+
+	// Quartz Scheduler
+	implementation("org.springframework.boot:spring-boot-starter-quartz")
 
 	// DB
 	implementation("org.springframework.data:spring-data-cassandra")
 
-    // Messaging
-    implementation("org.springframework.kafka:spring-kafka")
+	// Redis
+	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
-    // Cache
-    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+	// Kafka
+	implementation("org.springframework.kafka:spring-kafka")
+
+	// Testing
+	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.springframework.batch:spring-batch-test")
 }
 
 kotlin {

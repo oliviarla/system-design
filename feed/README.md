@@ -31,14 +31,13 @@
     - 다른 유저를 팔로우하거나 언팔로우할 수 있다.
         - 팔로우
             - ScyllaDB `following_by_user`, `follower_by_user` 테이블에 데이터 추가
-            - Redis `following_count:{username}`, `follower_count:{username}` INCR
+            - ScyllaDB `user` 테이블의 `following_count`, `follower_count` 컬럼 값 증가
             - Kafka event 발행 → 유저의 뉴스피드 캐시 최신화 (새롭게 팔로우한 사람의 피드 추가)
         - 언팔로우
             - ScyllaDB `following_by_user`, `follower_by_user` 테이블의 데이터 제거
-            - Redis `following_count:{username}`, `follower_count:{username}` DECR
+            - ScyllaDB `user` 테이블의 `following_count`, `follower_count` 컬럼 값 감소
             - Kafka event 발행 → 유저의 뉴스피드 캐시 최신화 (팔로우 취소한 사람의 피드 제거)
         - ScyllaDB에 오류 발생한 경우 예외를 던진다.
-        - Redis 오류 시에는 크게 신경쓰지 않고 주기적인 배치 서비스를 통해 팔로잉/팔로워 카운트를 수집해 ScyllaDB의 User 테이블과 Redis 아이템에 덮어써준다.
 
 ### 피드 서비스
 - 피드를 발행할 수 있다.
