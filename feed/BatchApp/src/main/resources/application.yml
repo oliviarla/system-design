@@ -1,0 +1,31 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: batch-app
+  datasource:
+    url: jdbc:mysql://localhost:3306/batch
+    username: batch_user
+    password: batch_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false  # Prevent auto-run on startup
+  quartz:
+    job-store-type: memory
+    properties:
+      org:
+        quartz:
+          threadPool:
+            threadCount: 5
+
+batch:
+  news-feed-cache:
+    max-items: 50
