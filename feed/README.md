@@ -31,14 +31,11 @@
     - 다른 유저를 팔로우하거나 언팔로우할 수 있다.
         - 팔로우
             - ScyllaDB `following_by_user`, `follower_by_user` 테이블에 데이터 추가
-            - Redis `following_count:{username}`, `follower_count:{username}` INCR
             - Kafka event 발행 → 유저의 뉴스피드 캐시 최신화 (새롭게 팔로우한 사람의 피드 추가)
         - 언팔로우
             - ScyllaDB `following_by_user`, `follower_by_user` 테이블의 데이터 제거
-            - Redis `following_count:{username}`, `follower_count:{username}` DECR
             - Kafka event 발행 → 유저의 뉴스피드 캐시 최신화 (팔로우 취소한 사람의 피드 제거)
         - ScyllaDB에 오류 발생한 경우 예외를 던진다.
-        - Redis 오류 시에는 크게 신경쓰지 않고 주기적인 배치 서비스를 통해 팔로잉/팔로워 카운트를 수집해 ScyllaDB의 User 테이블과 Redis 아이템에 덮어써준다.
 
 ### 피드 서비스
 - 피드를 발행할 수 있다.
@@ -107,6 +104,10 @@
     - 세션 정보가 파악된 요청은 실제 서비스에 전달될 때 내부적으로 생성한 JWT를 전달한다. 이를 통해 각 서비스들마다 Spring Session Data Redis 의존성을 가지지 않고도 어떤 권한을 가진 유저가 요청을 보냈는지 확인할 수 있다. 내부적으로 생성한 JWT는 외부 사용자에게 전달되면 안된다.
     - 세션 정보가 없는 요청은 그대로 실제 서비스에 전달된다.
 - 로그인, 로그아웃 기능은 User Service에 위임한다.
+
+### 배치 서비스
+- 뉴스 피드 아이템 크기 제한
+    - Redis에 저장된 뉴스 피드 ZSET 아이템이 일정 크기(현재는 50개 제한)를 초과하는 경우, 오래된 피드를 제거한다.
 
 ## 향후 계획
 

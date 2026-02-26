@@ -1,5 +1,6 @@
 package com.x.userapp.global
 
+import com.x.userapp.user.service.FollowOperationException
 import org.springframework.boot.web.error.ErrorAttributeOptions
 import org.springframework.boot.web.reactive.error.DefaultErrorAttributes
 import org.springframework.data.redis.RedisConnectionFailureException
@@ -39,8 +40,8 @@ class GlobalErrorAttributes : DefaultErrorAttributes() {
         return when {
             isRedisConnectionError(error) || isRedisConnectionError(rootCause) ->
                 "Service temporarily unavailable due to cache service issues. Please try again later."
-            error is IllegalArgumentException ->
-                error.message ?: "Invalid request"
+            error is FollowOperationException ->
+                error.message!!
             else ->
                 "An unexpected error occurred. Please try again later."
         }

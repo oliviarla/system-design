@@ -15,8 +15,6 @@ CREATE TABLE IF NOT EXISTS user_app.user
     username text PRIMARY KEY,
     password text,
     created_at timestamp,
-    following_count int,
-    follower_count int
 );
 
 CREATE TABLE IF NOT EXISTS user_app.following_by_user (

@@ -16,10 +16,6 @@ data class User(
     @field:Column("created_at")
     @field:CreatedDate
     var createdAt: Instant? = null,
-    @field:Column("following_count")
-    var followingCount: Int = 0,
-    @field:Column("follower_count")
-    var followerCount: Int = 0,
 ) : Persistable<String> {
 
     @Transient

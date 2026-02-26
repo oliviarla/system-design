@@ -1,5 +1,6 @@
 package com.x.userapp.user.service
 
+import com.datastax.oss.driver.api.core.servererrors.OverloadedException
 import com.x.userapp.user.domain.FollowerByUser
 import com.x.userapp.user.domain.FollowerKey
 import com.x.userapp.user.domain.FollowingByUser
@@ -10,11 +11,12 @@ import com.x.userapp.user.repository.FollowingByUserRepository
 import com.x.userapp.user.repository.KafkaProducer
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.dao.QueryTimeoutException
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import reactor.kotlin.core.util.function.component1
-import reactor.kotlin.core.util.function.component2
+import reactor.util.retry.Retry
 
 @Service
 class FollowService(
@@ -45,40 +47,55 @@ class FollowService(
     }
 
     private fun checkIfAlreadyFollowing(currentUsername: String, usernameToFollow: String): Mono<Boolean> {
-        val followingKey = FollowingKey(currentUsername, usernameToFollow)
-        val followerKey = FollowerKey(usernameToFollow, currentUsername)
-
-        val existsInFollowing = followingByUserRepository.existsById(followingKey)
-        val existsInFollower = followerByUserRepository.existsById(followerKey)
-
-        return Mono.zip(existsInFollowing, existsInFollower)
-            .map { (existsInFollowing, existsInFollower) ->
-                existsInFollowing || existsInFollower
-            }
+        return followingByUserRepository
+            .existsById(FollowingKey(currentUsername, usernameToFollow))
     }
 
     private fun saveFollowData(currentUsername: String, usernameToFollow: String): Mono<Void> {
-        val following = FollowingByUser(key = FollowingKey(currentUsername, usernameToFollow))
-        val follower = FollowerByUser(key = FollowerKey(usernameToFollow, currentUsername))
+        return followingByUserRepository
+            .save(FollowingByUser(key = FollowingKey(currentUsername, usernameToFollow)))
+            .onErrorMap { error ->
+                FollowOperationException(
+                    "Failed to save following data for $currentUsername -> $usernameToFollow",
+                    error
+                )
+            }
+            .doOnNext { _ ->
+                followerByUserRepository
+                    .save(FollowerByUser(key = FollowerKey(usernameToFollow, currentUsername)))
+                    .retryWhen(
+                        Retry
+                            .backoff(3, java.time.Duration.ofMillis(50))
+                            .filter { ex ->
+                                when (ex) {
+                                    is OverloadedException,
+                                    is QueryTimeoutException,
+                                    is TransientDataAccessException -> true
 
-        return followingByUserRepository.save(following)
-            .flatMap { savedFollowing ->
-                followerByUserRepository.save(follower)
-                    .onErrorResume { error ->
-                        // Rollback: delete the following record if follower save fails
-                        followingByUserRepository.delete(savedFollowing)
-                            .then(Mono.error(error))
-                    }
-            }.then(
-                followRedisRepository.incrFollowCount(currentUsername, usernameToFollow)
+                                    else -> false
+                                }
+                            }
+                    )
                     .doOnError { error ->
-                        logger.error(
-                            "Failed to increment follow count in Redis for $currentUsername -> $usernameToFollow",
+                        val customError = FollowOperationException(
+                            "Failed to save follower record after retries for $usernameToFollow <- $currentUsername",
                             error
                         )
+                        logger.error(
+                            "ALERT: Follower save failed after retries. Orphaned following record exists. Sending to DLQ for reconciliation.",
+                            customError
+                        )
+
+                        // Send to dead-letter topic for reconciliation instead of attempting rollback
+                        kafkaProducer.sendMessage(TOPIC_FOLLOW_FAILED, "$currentUsername $usernameToFollow")
+                            .doOnError { kafkaError ->
+                                logger.error(
+                                    "CRITICAL: Failed to send to DLQ. Manual cleanup required for $currentUsername -> $usernameToFollow",
+                                    kafkaError
+                                )
+                            }
                     }
-                    .onErrorResume { Mono.empty() }
-            ).then(
+            }.then(
                 kafkaProducer.sendMessage(TOPIC_USER_FOLLOW, "$currentUsername $usernameToFollow")
             )
     }
@@ -97,31 +114,48 @@ class FollowService(
     private fun deleteFollowData(currentUsername: String, usernameToUnfollow: String): Mono<Void> {
         val followingKey = FollowingKey(currentUsername, usernameToUnfollow)
         val followerKey = FollowerKey(usernameToUnfollow, currentUsername)
-        val following = FollowingByUser(key = followingKey)
 
         return followingByUserRepository.deleteById(followingKey)
-            .onErrorResume {
-                Mono.error(RuntimeException("Failed to delete following record.", it))
+            .onErrorMap { error ->
+                FollowOperationException(
+                    "Failed to delete following data for $currentUsername -> $usernameToUnfollow",
+                    error
+                )
             }
-            .then(
+            .doOnSuccess { _ ->
                 followerByUserRepository.deleteById(followerKey)
-                    .onErrorResume { error ->
-                        // Rollback: restore the following record if follower delete fails
-                        followingByUserRepository.save(following)
-                            .then(Mono.error(error))
-                    }
-            )
-            .then(
-                followRedisRepository.decrFollowCount(currentUsername, usernameToUnfollow)
+                    .retryWhen(
+                        Retry
+                            .backoff(3, java.time.Duration.ofMillis(50))
+                            .filter { ex ->
+                                when (ex) {
+                                    is OverloadedException,
+                                    is QueryTimeoutException,
+                                    is TransientDataAccessException -> true
+
+                                    else -> false
+                                }
+                            }
+                    )
                     .doOnError { error ->
-                        logger.error(
-                            "Failed to decrement follow count in Redis for $currentUsername -> $usernameToUnfollow",
+                        val customError = FollowOperationException(
+                            "Failed to delete follower record after retries for $usernameToUnfollow <- $currentUsername",
                             error
                         )
+                        logger.error(
+                            "ALERT: Follower delete failed after retries. Orphaned following record exists. Sending to DLQ for reconciliation.",
+                            customError
+                        )
+
+                        kafkaProducer.sendMessage(TOPIC_UNFOLLOW_FAILED, "$currentUsername $usernameToUnfollow")
+                            .doOnError { kafkaError ->
+                                logger.error(
+                                    "CRITICAL: Failed to send to DLQ. Manual cleanup required for $currentUsername -> $usernameToUnfollow",
+                                    kafkaError
+                                )
+                            }
                     }
-                    .onErrorResume { Mono.empty() }
-            )
-            .then(
+            }.then(
                 kafkaProducer.sendMessage(TOPIC_USER_UNFOLLOW, "$currentUsername $usernameToUnfollow")
             )
     }
@@ -130,11 +164,7 @@ class FollowService(
         return followRedisRepository.getFollowingCount(username)
             .onErrorResume { error ->
                 logger.error("Failed to get following count from Redis for $username, falling back to ScyllaDB", error)
-                followingByUserRepository.countByKeyUsername(username)
-                    .flatMap {
-                        followRedisRepository.setFollowingCount(username, it)
-                            .thenReturn(it)
-                    }
+                return@onErrorResume Mono.empty()
             }
             .switchIfEmpty(
                 followingByUserRepository.countByKeyUsername(username)
@@ -149,11 +179,7 @@ class FollowService(
         return followRedisRepository.getFollowerCount(username)
             .onErrorResume { error ->
                 logger.error("Failed to get follower count from Redis for $username, falling back to ScyllaDB", error)
-                followerByUserRepository.countByKeyUsername(username)
-                    .flatMap {
-                        followRedisRepository.setFollowerCount(username, it)
-                            .thenReturn(it)
-                    }
+                return@onErrorResume Mono.empty()
             }
             .switchIfEmpty(
                 followerByUserRepository.countByKeyUsername(username)
@@ -168,5 +194,7 @@ class FollowService(
         private val logger: Logger = LoggerFactory.getLogger(FollowService::class.java)
         const val TOPIC_USER_FOLLOW = "user-follow"
         const val TOPIC_USER_UNFOLLOW = "user-unfollow"
+        const val TOPIC_FOLLOW_FAILED = "user-follow-failed"
+        const val TOPIC_UNFOLLOW_FAILED = "user-unfollow-failed"
     }
 }
